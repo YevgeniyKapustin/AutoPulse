@@ -29,7 +29,9 @@ def upgrade() -> None:
         sa.Column("target_margin_pct", sa.Float(), nullable=False),
         sa.Column("price_low", sa.Float(), nullable=False),
         sa.Column("price_high", sa.Float(), nullable=False),
-        sa.Column("currency", sa.String(length=8), server_default="USD", nullable=False),
+        sa.Column(
+            "currency", sa.String(length=8), server_default="USD", nullable=False
+        ),
         sa.Column(
             "model_version",
             sa.String(length=64),

@@ -3,7 +3,6 @@
 from io import BytesIO
 
 from PIL import Image
-
 from services.enrichment.app.services.cv_service import CvService
 
 

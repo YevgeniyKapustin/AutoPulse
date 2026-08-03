@@ -8,6 +8,7 @@ from aio_pika.abc import AbstractChannel, AbstractExchange, AbstractRobustQueue
 
 from services.enrichment.app.core.config import Settings
 
+
 async def declare_topology(
     channel: AbstractChannel,
     settings: Settings,

@@ -6,7 +6,7 @@ import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Protocol, TypeVar
+from typing import Protocol
 
 from autopulse_shared.schemas.events import (
     EnrichmentFailedEvent,
@@ -22,8 +22,6 @@ from autopulse_shared.schemas.listing import (
 from services.enrichment.app.core.exceptions import EnrichmentError
 from services.enrichment.app.services.cv_service import CvService
 from services.enrichment.app.services.llm_service import LlmService
-
-T = TypeVar("T")
 
 
 class ListingStore(Protocol):
@@ -45,7 +43,7 @@ class EventSink(Protocol):
 logger = logging.getLogger(__name__)
 
 
-async def _const(value: T) -> T:
+async def _const[T](value: T) -> T:
     return value
 
 

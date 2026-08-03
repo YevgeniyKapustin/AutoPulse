@@ -1,6 +1,7 @@
-from autopulse_shared.schemas.listing import EnrichedListing, ListingSource
 from services.pricer.app.core.config import Settings
 from services.pricer.app.services.margin_rules import MarginRuleEngine
+
+from autopulse_shared.schemas.listing import EnrichedListing, ListingSource
 
 
 def test_margin_rule_applies_defect_penalty() -> None:

@@ -1,9 +1,12 @@
 import pytest
-
-from autopulse_shared.schemas.listing import RawListing
-from services.enrichment.app.core.circuit_breaker import CircuitBreaker, CircuitOpenError
+from services.enrichment.app.core.circuit_breaker import (
+    CircuitBreaker,
+    CircuitOpenError,
+)
 from services.enrichment.app.core.config import Settings
 from services.enrichment.app.services.llm_service import LlmService
+
+from autopulse_shared.schemas.listing import RawListing
 
 
 @pytest.mark.asyncio

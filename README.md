@@ -87,5 +87,5 @@ Week-1 enrichment pipeline is implemented. Pricer Rabbit/MySQL wiring is next
 ```bash
 make test
 make lint
-make format
+make format   # black shared services
 ```

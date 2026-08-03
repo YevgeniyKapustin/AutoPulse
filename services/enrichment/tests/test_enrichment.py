@@ -1,11 +1,4 @@
 import pytest
-
-from autopulse_shared.schemas.events import (
-    EnrichmentFailedEvent,
-    ListingEnrichedEvent,
-    RawListingEvent,
-)
-from autopulse_shared.schemas.listing import ListingSource, RawListing
 from services.enrichment.app.core.config import Settings
 from services.enrichment.app.repositories.memory import InMemoryListingRepository
 from services.enrichment.app.services.cv_service import CvService
@@ -13,6 +6,13 @@ from services.enrichment.app.services.enrichment_orchestrator import (
     EnrichmentOrchestrator,
 )
 from services.enrichment.app.services.llm_service import LlmService
+
+from autopulse_shared.schemas.events import (
+    EnrichmentFailedEvent,
+    ListingEnrichedEvent,
+    RawListingEvent,
+)
+from autopulse_shared.schemas.listing import ListingSource, RawListing
 
 
 class FakePublisher:

@@ -1,13 +1,13 @@
 import pytest
-
-from autopulse_shared.schemas.events import ListingEnrichedEvent
-from autopulse_shared.schemas.listing import EnrichedListing, ListingSource
 from services.pricer.app.consumers.enriched_listing_consumer import (
     EnrichedListingConsumer,
 )
 from services.pricer.app.core.config import Settings
 from services.pricer.app.repositories.memory import InMemoryPricingRepository
 from services.pricer.app.services.pricing_service import PricingService
+
+from autopulse_shared.schemas.events import ListingEnrichedEvent
+from autopulse_shared.schemas.listing import EnrichedListing, ListingSource
 
 
 @pytest.mark.asyncio

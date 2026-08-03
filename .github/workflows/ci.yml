@@ -27,6 +27,9 @@ jobs:
           pip install -e "./services/enrichment[dev]"
           pip install -e "./services/pricer[dev]"
 
+      - name: Black
+        run: black --check shared services
+
       - name: Ruff
         run: ruff check shared services
 

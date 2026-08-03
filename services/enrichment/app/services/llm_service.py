@@ -68,11 +68,7 @@ class LlmService:
             raise EnrichmentError(str(exc), stage="llm") from exc
 
     def _extract_heuristic(self, listing: RawListing) -> ListingOptions:
-        text = " ".join(
-            part
-            for part in (listing.title, listing.description)
-            if part
-        )
+        text = " ".join(part for part in (listing.title, listing.description) if part)
         packages = [name for name, pat in _PACKAGE_PATTERNS if pat.search(text)]
         features = [name for name, pat in _FEATURE_PATTERNS if pat.search(text)]
         tags: list[str] = ["heuristic"]
@@ -118,9 +114,7 @@ class LlmService:
             "temperature": 0,
             "response_format": {"type": "json_object"},
         }
-        client = self._http or httpx.AsyncClient(
-            timeout=self._settings.llm_timeout_sec
-        )
+        client = self._http or httpx.AsyncClient(timeout=self._settings.llm_timeout_sec)
         owns_client = self._http is None
         try:
             response = await client.post(

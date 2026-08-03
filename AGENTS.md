@@ -18,8 +18,9 @@ slices over incomplete sprawl.
    `asyncio.to_thread()` or a `ThreadPoolExecutor`.
 4. **SOLID** — thin routers, orchestrators coordinate, repositories own I/O,
    domain rules stay free of FastAPI/RabbitMQ.
-5. **Line length ≤ 100**. Comments only when intent is non-obvious. English
-   for code, commits, and agent docs.
+5. **Black formatting** — code line length **88**, docstrings/comments
+   **≤ 72**. Run `black shared services` (not `ruff format`). English for
+   code, commits, and agent docs. Comments only when intent is non-obvious.
 
 ## Where to work
 

@@ -11,8 +11,8 @@ help:
 	@echo "  make config-prod - validate compose.yaml + compose.prod.yaml"
 	@echo "  make up-prod     - prod overlay (requires TAG=...)"
 	@echo "  make test        - run pytest for both services"
-	@echo "  make lint        - ruff + mypy"
-	@echo "  make format      - ruff format"
+	@echo "  make lint        - ruff check + mypy"
+	@echo "  make format      - black (line length 88)"
 
 install:
 	python -m pip install -e "./shared[dev]"
@@ -49,4 +49,4 @@ lint:
 	mypy shared services/enrichment/app services/pricer/app
 
 format:
-	ruff format shared services
+	black shared services

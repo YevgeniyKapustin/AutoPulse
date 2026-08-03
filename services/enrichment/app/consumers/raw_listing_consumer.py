@@ -1,4 +1,7 @@
-"""RabbitMQ consumer for car.raw.created — ack only after full aggregation."""
+"""RabbitMQ consumer for car.raw.created.
+
+Ack only after full aggregation.
+"""
 
 from __future__ import annotations
 

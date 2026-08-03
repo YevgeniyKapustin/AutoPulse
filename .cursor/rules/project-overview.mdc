@@ -11,4 +11,5 @@ alwaysApply: true
 - Ack enrichment only after LLM + CV + durable Mongo upsert.
 - Offload blocking CV/SDK work with `asyncio.to_thread`.
 - Follow `docs/roadmap.md`; extend `TODO(week-N)` stubs instead of parallel code.
-- English in code; max line length 100; SOLID layering (api → services → repos).
+- Format with **Black** (code line length 88; docstrings/comments ≤ 72).
+- English in code; SOLID layering (api → services → repos).
