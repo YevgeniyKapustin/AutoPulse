@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     routing_key_enriched_success: str = "car.enriched.success"
     routing_key_enrichment_failed: str = "car.enrichment.failed"
     routing_key_enrichment_dlq: str = "car.enrichment.dlq"
+    enrichment_queue_name: str = "enrichment.raw"
+    enrichment_dlq_name: str = "enrichment.dlq"
 
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_db: str = "autopulse"
@@ -36,9 +38,10 @@ class Settings(BaseSettings):
 
     @property
     def rabbitmq_url(self) -> str:
+        vhost = "" if self.rabbitmq_vhost in {"", "/"} else self.rabbitmq_vhost
         return (
             f"amqp://{self.rabbitmq_user}:{self.rabbitmq_password}"
-            f"@{self.rabbitmq_host}:{self.rabbitmq_port}/{self.rabbitmq_vhost}"
+            f"@{self.rabbitmq_host}:{self.rabbitmq_port}/{vhost}"
         )
 
 
