@@ -19,7 +19,8 @@ Ack rule: broker ack only when `is_fully_enriched` is true and upsert succeeded.
 ### Market Pricer Service
 
 - **Ingress:** `car.enriched.success` (+ HTTP estimate for debugging)
-- **Logic:** `MarginRuleEngine` (rules first; sklearn optional later)
+- **Logic:** `PricingEngine` protocol — `MarginRuleEngine` (default) or
+  `SklearnPricingEngine` via `PRICING_ENGINE=sklearn`
 - **State:** MySQL `pricing_results`
 - **Outputs:** `bid_price`, `recommended_dealer_bid`, `estimated_turnover_days`
 

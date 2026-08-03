@@ -24,13 +24,13 @@ item in the current week unless the user redirects.
 - [x] Async MySQL repository (SQLAlchemy 2)
 - [x] Alembic migrations (optional but preferred)
 - [x] End-to-end: raw → enriched → priced
-- [ ] Optional: simple sklearn regressor behind same interface
+- [x] Optional: simple sklearn regressor behind same interface
 
 ## Week 3 — Reliability, tests, CI
 
 - [x] GitHub Actions scaffold (lint + unit tests)
 - [x] Unit tests for orchestrator / rules / breaker
-- [ ] Integration tests with testcontainers (RabbitMQ, Mongo, MySQL)
+- [x] Integration tests with testcontainers (RabbitMQ, Mongo, MySQL)
 - [x] Harden Dockerfiles (non-root, healthchecks)
 - [x] Polish README runbook + Mermaid diagram
 - [x] Sample curl / event fixtures under `docs/fixtures/`
