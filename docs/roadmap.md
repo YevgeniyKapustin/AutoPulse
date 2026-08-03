@@ -20,10 +20,10 @@ item in the current week unless the user redirects.
 
 - [x] Pricer FastAPI skeleton + margin rule engine baseline
 - [x] SQLAlchemy model for `pricing_results`
-- [ ] aio_pika consumer for `car.enriched.success`
-- [ ] Async MySQL repository (SQLAlchemy 2)
-- [ ] Alembic migrations (optional but preferred)
-- [ ] End-to-end: raw → enriched → priced
+- [x] aio_pika consumer for `car.enriched.success`
+- [x] Async MySQL repository (SQLAlchemy 2)
+- [x] Alembic migrations (optional but preferred)
+- [x] End-to-end: raw → enriched → priced
 - [ ] Optional: simple sklearn regressor behind same interface
 
 ## Week 3 — Reliability, tests, CI
@@ -33,7 +33,7 @@ item in the current week unless the user redirects.
 - [ ] Integration tests with testcontainers (RabbitMQ, Mongo, MySQL)
 - [x] Harden Dockerfiles (non-root, healthchecks)
 - [x] Polish README runbook + Mermaid diagram
-- [ ] Sample curl / event fixtures under `docs/fixtures/`
+- [x] Sample curl / event fixtures under `docs/fixtures/`
 
 ## Stretch (after MVP)
 

@@ -13,8 +13,7 @@ Use these as prompts when starting a focused session.
 
 ## Brief C — Pricer MySQL path
 
-Wire SQLAlchemy async engine, create tables / Alembic, implement
-`PricingRepository.save/get`, consume enriched events.
+~~Wire SQLAlchemy async engine…~~ **Done** on `feature/week2-pricer-pipeline`.
 
 ## Brief D — Integration smoke
 

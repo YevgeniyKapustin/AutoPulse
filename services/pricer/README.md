@@ -9,17 +9,26 @@ results to MySQL.
 uvicorn services.pricer.app.main:app --reload --port 8002
 ```
 
+Local compose sets `AUTO_CREATE_TABLES=true`. Prefer Alembic for shared envs:
+
+```bash
+make migrate
+```
+
 ## Key modules
 
 | Module | Role |
 |--------|------|
-| `app/api/pricing.py` | Manual estimate endpoint |
-| `app/consumers/enriched_listing_consumer.py` | aio_pika (stub) |
+| `app/api/pricing.py` | Estimate + get endpoints |
+| `app/consumers/enriched_listing_consumer.py` | aio_pika consumer |
+| `app/messaging/topology.py` | Topic exchange + DLQ |
 | `app/services/margin_rules.py` | Deterministic rule engine |
-| `app/services/pricing_service.py` | Orchestrates price + persist |
-| `app/models/pricing.py` | SQLAlchemy ORM |
-| `app/repositories/pricing_repository.py` | MySQL adapter (stub) |
+| `app/services/pricing_service.py` | Price + persist |
+| `app/repositories/pricing_repository.py` | Async MySQL upsert/get |
+| `app/db/session.py` | SQLAlchemy async engine |
+| `alembic/` | Schema migrations |
 
 ## Next TODOs
 
-See week-2 items in `docs/roadmap.md`.
+Optional sklearn regressor behind the same `PricingService` interface.
+Docker smoke (Brief D) still open.
