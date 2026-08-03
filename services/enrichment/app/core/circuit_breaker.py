@@ -1,7 +1,11 @@
 """Circuit breaker helpers for external LLM / Vision APIs."""
 
+from collections.abc import Awaitable, Callable
 from enum import StrEnum
 from time import monotonic
+from typing import TypeVar
+
+T = TypeVar("T")
 
 
 class CircuitState(StrEnum):
@@ -10,8 +14,12 @@ class CircuitState(StrEnum):
     HALF_OPEN = "half_open"
 
 
+class CircuitOpenError(RuntimeError):
+    pass
+
+
 class CircuitBreaker:
-    """Minimal in-memory circuit breaker skeleton."""
+    """Minimal in-memory circuit breaker."""
 
     def __init__(
         self,
@@ -30,7 +38,7 @@ class CircuitBreaker:
             if monotonic() - self.opened_at >= self.recovery_timeout_sec:
                 self.state = CircuitState.HALF_OPEN
             else:
-                raise RuntimeError("Circuit breaker is OPEN")
+                raise CircuitOpenError("Circuit breaker is OPEN")
 
     def record_success(self) -> None:
         self.failures = 0
@@ -42,3 +50,13 @@ class CircuitBreaker:
         if self.failures >= self.failure_threshold:
             self.state = CircuitState.OPEN
             self.opened_at = monotonic()
+
+    async def call(self, func: Callable[[], Awaitable[T]]) -> T:
+        self.before_call()
+        try:
+            result = await func()
+        except Exception:
+            self.record_failure()
+            raise
+        self.record_success()
+        return result
