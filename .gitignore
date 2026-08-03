@@ -10,6 +10,8 @@ dist/
 .eggs/
 *.egg
 .venv/
+.venv-broken/
+services/**/.venv/
 venv/
 ENV/
 .env
