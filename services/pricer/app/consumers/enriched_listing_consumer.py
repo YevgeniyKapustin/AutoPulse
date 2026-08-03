@@ -36,13 +36,20 @@ class EnrichedListingConsumer:
         )
 
     async def stop(self) -> None:
-        if self._channel is not None and self._consumer_tag is not None:
-            await self._channel.cancel(self._consumer_tag)
-        if self._channel is not None:
-            await self._channel.close()
-        if self._connection is not None:
-            await self._connection.close()
-        logger.info("EnrichedListingConsumer stopped")
+        try:
+            if self._channel is not None and self._consumer_tag is not None:
+                await self._channel.cancel(self._consumer_tag)
+        finally:
+            self._consumer_tag = None
+            try:
+                if self._channel is not None and not self._channel.is_closed:
+                    await self._channel.close()
+            finally:
+                self._channel = None
+                if self._connection is not None and not self._connection.is_closed:
+                    await self._connection.close()
+                self._connection = None
+                logger.info("EnrichedListingConsumer stopped")
 
     async def _on_message(self, message: AbstractIncomingMessage) -> None:
         try:
