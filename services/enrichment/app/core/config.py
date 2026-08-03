@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -9,6 +10,8 @@ class Settings(BaseSettings):
     enrichment_host: str = "0.0.0.0"
     enrichment_port: int = 8001
     log_level: str = "INFO"
+    # api = HTTP + publisher; worker = consumer only; all = both (local DX)
+    run_mode: Literal["api", "worker", "all"] = "all"
 
     rabbitmq_host: str = "localhost"
     rabbitmq_port: int = 5672
@@ -16,6 +19,11 @@ class Settings(BaseSettings):
     rabbitmq_password: str = "autopulse"
     rabbitmq_vhost: str = "/"
     rabbitmq_exchange: str = "autopulse.cars"
+    rabbitmq_connection_name: str = "autopulse-enrichment"
+    rabbitmq_heartbeat_sec: int = 30
+    rabbitmq_connect_timeout_sec: float = 10.0
+    rabbitmq_quorum_queues: bool = True
+    rabbitmq_prefetch: int = 4
 
     routing_key_raw_created: str = "car.raw.created"
     routing_key_enriched_success: str = "car.enriched.success"
@@ -27,6 +35,8 @@ class Settings(BaseSettings):
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_db: str = "autopulse"
     mongodb_collection_listings: str = "listings"
+    mongodb_collection_inbox: str = "consumer_inbox"
+    mongodb_collection_outbox: str = "publisher_outbox"
 
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
@@ -35,6 +45,9 @@ class Settings(BaseSettings):
     llm_max_retries: int = 3
     cv_max_workers: int = 4
     enrichment_max_retries: int = 5
+    enrichment_retry_base_delay_sec: float = 1.0
+    enrichment_retry_max_delay_sec: float = 30.0
+    shutdown_timeout_sec: float = 10.0
 
     @property
     def rabbitmq_url(self) -> str:

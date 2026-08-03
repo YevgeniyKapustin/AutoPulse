@@ -27,3 +27,29 @@ class PricingResultRow(Base):
     priced_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC)
     )
+
+
+class ProcessedEventRow(Base):
+    """Consumer inbox — claim event_id exactly once."""
+
+    __tablename__ = "processed_events"
+
+    event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC)
+    )
+
+
+class OutboxMessageRow(Base):
+    """Transactional outbox for post-commit RabbitMQ publishes."""
+
+    __tablename__ = "outbox_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    routing_key: Mapped[str] = mapped_column(String(128))
+    payload: Mapped[str] = mapped_column(Text)
+    headers_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC)
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

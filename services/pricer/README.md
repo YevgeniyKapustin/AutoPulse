@@ -12,7 +12,8 @@ uvicorn services.pricer.app.main:app --reload --port 8002
 Local compose sets `AUTO_CREATE_TABLES=true`. Prefer Alembic for shared envs:
 
 ```bash
-make migrate
+make migrate         # host Poetry (dev)
+make migrate-docker  # same container image as the app
 ```
 
 ## Key modules

@@ -1,55 +1,55 @@
-"""Data Enrichment Service — FastAPI entrypoint."""
+"""Enrichment FastAPI entrypoint (API or combined local mode)."""
 
+from __future__ import annotations
+
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 
 from services.enrichment.app.api.health import router as health_router
 from services.enrichment.app.api.listings import router as listings_router
-from services.enrichment.app.consumers.raw_listing_consumer import RawListingConsumer
-from services.enrichment.app.core.circuit_breaker import CircuitBreaker
 from services.enrichment.app.core.config import get_settings
 from services.enrichment.app.core.logging import setup_logging
+from services.enrichment.app.core.metrics import METRICS
 from services.enrichment.app.core.middleware import RequestIdMiddleware
-from services.enrichment.app.repositories.listing_repository import ListingRepository
-from services.enrichment.app.services.cv_service import CvService
-from services.enrichment.app.services.enrichment_orchestrator import (
-    EnrichmentOrchestrator,
+from services.enrichment.app.runtime import (
+    attach_publisher,
+    build_runtime,
+    shutdown_runtime,
+    start_consumer,
 )
-from services.enrichment.app.services.llm_service import LlmService
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     setup_logging(settings.log_level)
+    mode = settings.run_mode
+    if mode == "worker":
+        raise RuntimeError(
+            "RUN_MODE=worker requires services.enrichment.app.worker, not uvicorn"
+        )
 
-    repository, mongo_client = ListingRepository.from_settings(
-        settings.mongodb_uri,
-        settings.mongodb_db,
-        settings.mongodb_collection_listings,
-    )
-    await repository.ensure_indexes()
+    runtime = await build_runtime(settings)
+    if mode == "api":
+        await attach_publisher(runtime)
+    elif mode == "all":
+        await start_consumer(runtime)
+    else:
+        raise RuntimeError(f"Unsupported RUN_MODE={mode!r} (use api|worker|all)")
 
-    llm = LlmService(settings, breaker=CircuitBreaker())
-    cv = CvService()
-    orchestrator = EnrichmentOrchestrator(
-        repository=repository,
-        llm=llm,
-        cv=cv,
-    )
-    consumer = RawListingConsumer(settings, orchestrator)
-    await consumer.start()
-
-    app.state.orchestrator = orchestrator
-    app.state.consumer = consumer
-    app.state.mongo_client = mongo_client
+    app.state.orchestrator = runtime.orchestrator
+    app.state.runtime = runtime
     try:
         yield
     finally:
-        await consumer.stop()
-        mongo_client.close()
+        with suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(
+                shutdown_runtime(runtime),
+                timeout=settings.shutdown_timeout_sec,
+            )
 
 
 def create_app() -> FastAPI:
@@ -62,6 +62,14 @@ def create_app() -> FastAPI:
     application.add_middleware(RequestIdMiddleware)
     application.include_router(health_router)
     application.include_router(listings_router, prefix="/api/v1")
+
+    @application.get("/metrics")
+    async def metrics() -> Response:
+        return Response(
+            content=METRICS.render_prometheus(),
+            media_type="text/plain; version=0.0.4",
+        )
+
     application.state.settings = settings
     return application
 

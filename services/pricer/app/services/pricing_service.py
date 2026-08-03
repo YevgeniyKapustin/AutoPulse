@@ -15,7 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 class PricingStore(Protocol):
-    async def save(self, result: PricingResult) -> None: ...
+    async def save(
+        self,
+        result: PricingResult,
+        *,
+        event_id: str | None = None,
+    ) -> None: ...
 
     async def get(self, external_id: str) -> PricingResult: ...
 
@@ -31,15 +36,21 @@ class PricingService:
         self._repository = repository
         self._engine = engine or build_pricing_engine(settings)
 
-    async def price(self, listing: EnrichedListing) -> PricingResult:
+    async def price(
+        self,
+        listing: EnrichedListing,
+        *,
+        event_id: str | None = None,
+    ) -> PricingResult:
         result = self._engine.evaluate(listing)
-        await self._repository.save(result)
+        await self._repository.save(result, event_id=event_id)
         logger.info(
             "Priced %s bid=%.2f turnover=%s engine=%s",
             result.external_id,
             result.recommended_dealer_bid,
             result.estimated_turnover_days,
             result.model_version,
+            extra={"event_id": event_id, "external_id": result.external_id},
         )
         return result
 

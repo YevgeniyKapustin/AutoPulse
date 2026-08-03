@@ -1,4 +1,4 @@
-"""SQLAlchemy async repository for pricing results."""
+"""SQLAlchemy async repository for pricing results + inbox/outbox."""
 
 from __future__ import annotations
 
@@ -6,18 +6,45 @@ import json
 from datetime import UTC, datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from autopulse_shared.schemas.events import PricingCompletedEvent
 from autopulse_shared.schemas.pricing import PricingResult
+from services.pricer.app.core.config import Settings
 from services.pricer.app.core.exceptions import PricingNotFoundError
-from services.pricer.app.models.pricing import PricingResultRow
+from services.pricer.app.models.pricing import (
+    OutboxMessageRow,
+    PricingResultRow,
+    ProcessedEventRow,
+)
 
 
 class PricingRepository:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        settings: Settings | None = None,
+    ) -> None:
         self._session_factory = session_factory
+        self._settings = settings or Settings()
 
-    async def save(self, result: PricingResult) -> None:
+    async def try_claim_event(self, event_id: str) -> bool:
+        async with self._session_factory() as session:
+            session.add(
+                ProcessedEventRow(
+                    event_id=event_id,
+                    processed_at=datetime.now(UTC).replace(tzinfo=None),
+                )
+            )
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                return False
+            return True
+
+    async def save(self, result: PricingResult, *, event_id: str | None = None) -> None:
         async with self._session_factory() as session:
             row = await session.scalar(
                 select(PricingResultRow).where(
@@ -30,6 +57,44 @@ class PricingRepository:
             else:
                 for key, value in payload.items():
                     setattr(row, key, value)
+
+            completed = PricingCompletedEvent(
+                event_id=event_id or result.external_id,
+                result=result,
+            )
+            session.add(
+                OutboxMessageRow(
+                    routing_key=self._settings.routing_key_priced_success,
+                    payload=completed.model_dump_json(),
+                    headers_json=json.dumps(
+                        {
+                            "event_type": completed.event_type,
+                            "schema_version": completed.schema_version,
+                            "event_id": completed.event_id,
+                            "x-request-id": completed.request_id,
+                        }
+                    ),
+                    created_at=datetime.now(UTC).replace(tzinfo=None),
+                )
+            )
+            await session.commit()
+
+    async def list_pending_outbox(self, limit: int = 50) -> list[OutboxMessageRow]:
+        async with self._session_factory() as session:
+            rows = await session.scalars(
+                select(OutboxMessageRow)
+                .where(OutboxMessageRow.published_at.is_(None))
+                .order_by(OutboxMessageRow.id)
+                .limit(limit)
+            )
+            return list(rows)
+
+    async def mark_outbox_published(self, outbox_id: int) -> None:
+        async with self._session_factory() as session:
+            row = await session.get(OutboxMessageRow, outbox_id)
+            if row is None:
+                return
+            row.published_at = datetime.now(UTC).replace(tzinfo=None)
             await session.commit()
 
     async def get(self, external_id: str) -> PricingResult:

@@ -6,16 +6,26 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from autopulse_shared.schemas.listing import EnrichedListing, RawListing
+from autopulse_shared.schemas.pricing import PricingResult
+
+
+SCHEMA_VERSION = "1"
 
 
 class EventType(StrEnum):
     RAW_CREATED = "car.raw.created"
     ENRICHED_SUCCESS = "car.enriched.success"
     ENRICHMENT_FAILED = "car.enrichment.failed"
+    PRICED_SUCCESS = "car.priced.success"
+
+
+def _new_event_id() -> str:
+    return str(uuid4())
 
 
 class BaseEvent(BaseModel):
-    event_id: str = Field(default_factory=lambda: str(uuid4()))
+    schema_version: str = SCHEMA_VERSION
+    event_id: str = Field(default_factory=_new_event_id)
     event_type: EventType
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     request_id: str | None = None
@@ -37,3 +47,8 @@ class EnrichmentFailedEvent(BaseEvent):
     external_id: str
     error: str
     stage: str | None = None
+
+
+class PricingCompletedEvent(BaseEvent):
+    event_type: Literal[EventType.PRICED_SUCCESS] = EventType.PRICED_SUCCESS
+    result: PricingResult
