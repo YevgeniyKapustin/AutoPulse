@@ -6,7 +6,7 @@
 |------|------|
 | `compose.yaml` | Base stack: pinned images, networks, healthchecks, discovery env |
 | `compose.override.yaml` | Local only (auto-merged): `127.0.0.1` ports, bind mounts, `--reload` |
-| `compose.prod.yaml` | Prod overlay: registry images by `TAG`, no DB/app host ports |
+| `compose.prod.yaml` | Prod overlay: GHCR images by `TAG`, API + worker, fail-closed secrets |
 | `.dockerignore` | Keeps `.git` / `.env` / caches out of build context |
 | `services/*/Dockerfile` | Multi-stage, non-root `appuser`, Python healthcheck |
 
@@ -19,11 +19,22 @@ anchor therefore only sets service discovery (`RABBITMQ_HOST`,
 | Mode | Source |
 |------|--------|
 | Local | `compose.override.yaml` → `env_file: .env` |
-| Prod | `compose.prod.yaml` → `ENRICHMENT_ENV_FILE` / `PRICER_ENV_FILE` |
+| Prod | `compose.prod.yaml` → required `ENRICHMENT_ENV_FILE` / `PRICER_ENV_FILE` |
 
-Datastore containers (RabbitMQ / MySQL) still interpolate bootstrap users
-from the **host** shell or project `.env` at compose-parse time
-(`${RABBITMQ_USER:-autopulse}`, etc.).
+Datastore bootstrap on the host:
+
+| Mode | Behavior |
+|------|----------|
+| Local | `${RABBITMQ_USER:-autopulse}` (and friends) — weak defaults OK |
+| Prod | `${RABBITMQ_USER:?…}` — missing/empty fails compose parse |
+
+## Process model (`RUN_MODE`)
+
+| Value | Process | Use |
+|-------|---------|-----|
+| `all` | HTTP + consumer in one process | Local DX (default) |
+| `api` | HTTP (+ publisher for enrichment) | Prod API containers |
+| `worker` | Consumer only (`python -m …worker`) | Prod worker containers |
 
 ## Local
 
@@ -33,34 +44,56 @@ docker compose up -d --build
 docker compose config   # validate merge
 ```
 
-`--reload` restarts the process on code change; lifespan shutdown calls
-`await consumer.stop()` which closes the aio_pika channel + connection.
+`--reload` restarts the process on code change; lifespan shutdown stops
+consumers and closes aio_pika channels.
 
 ## Production
 
 Do **not** deploy with the override file (it publishes DB ports on
-localhost for DBeaver/Compass). Always pass `TAG` explicitly:
+localhost for DBeaver/Compass). Always pass `TAG` and secrets explicitly:
 
 ```bash
 export TAG=$(git rev-parse --short HEAD)
-# place secrets on the host, e.g. /run/env/enrichment.env
 export ENRICHMENT_ENV_FILE=/run/env/enrichment.env
 export PRICER_ENV_FILE=/run/env/pricer.env
+export RABBITMQ_USER=… RABBITMQ_PASSWORD=…
+export MYSQL_ROOT_PASSWORD=… MYSQL_USER=… MYSQL_PASSWORD=… MYSQL_DATABASE=…
 docker compose -f compose.yaml -f compose.prod.yaml pull
 docker compose -f compose.yaml -f compose.prod.yaml up -d
-# or: make up-prod TAG=$TAG
+# or: make up-prod TAG=$TAG ENRICHMENT_ENV_FILE=… …
 ```
 
-`${TAG:?…}` fails fast if `TAG` is missing. CI sets `TAG: ci-${{ github.sha }}`
-for compose validation and image builds.
+`${TAG:?…}` and datastore `${VAR:?…}` fail fast if unset/empty. CI sets
+dummy secrets for `config -q` and pushes images as
+`ghcr.io/yevgeniykapustin/autopulse-{enrichment,pricer}:ci-<sha>` on push
+to `main`/`master`.
 
-Checklist highlights:
+## Admin processes (Factor XII)
 
-- pinned third-party images (no `:latest`)
-- multi-stage + `USER appuser` (no `curl` in runtime; health via Python)
-- Poetry per-service install (no cross-service dep leakage in images)
-- healthchecks + `depends_on: service_healthy`
-- datastores without published ports in prod
-- secrets via env files, not image layers / not YAML defaults
-- enrichment memory limit `1G` (Pillow/CV headroom); pricer `512M`
-- logs to stdout (json-file rotation in prod overlay)
+Prefer one-offs from the **same image** as the running release:
+
+```bash
+make migrate-docker
+# or:
+docker compose run --rm --entrypoint "" pricer \
+  alembic -c /app/services/pricer/alembic.ini upgrade head
+```
+
+`make migrate` (host Poetry) is fine for local DX only.
+
+## 12-Factor snapshot
+
+| # | Factor | Status |
+|---|--------|--------|
+| I | Codebase | One repo, two deployables (`enrichment` / `pricer`) |
+| II | Dependencies | Per-service Poetry lockfiles; images install from those |
+| III | Config | Env / required `env_file`; prod fail-closed on secrets |
+| IV | Backing services | Rabbit/Mongo/MySQL via env URLs/hosts |
+| V | Build, release, run | Multi-stage build; CI pushes `TAG` digests to GHCR |
+| VI | Processes | Stateless apps; API vs worker split in prod |
+| VII | Port binding | Uvicorn binds `0.0.0.0:8001/8002` |
+| VIII | Concurrency | Scale API and worker replicas independently |
+| IX | Disposability | Fast health; graceful stop < `stop_grace_period` |
+| X | Dev/prod parity | Same Dockerfiles; override only for local ports/reload |
+| XI | Logs | JSON on stdout; ship/collect externally |
+| XII | Admin processes | `make migrate-docker` against the pricer image |

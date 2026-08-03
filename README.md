@@ -39,11 +39,13 @@ Uses `compose.yaml` + `compose.override.yaml` (host ports, bind mounts, reload).
 - RabbitMQ UI: http://localhost:15672 (`autopulse` / `autopulse`)
 
 Production overlay (registry images, no DB ports): see [docs/docker.md](docs/docker.md).
+RabbitMQ production checklist: [docs/messaging.md](docs/messaging.md).
 
 ```bash
 export TAG=$(git rev-parse --short HEAD)
-docker compose -f compose.yaml -f compose.prod.yaml config
-# deploy: make up-prod TAG=$TAG
+make config-prod   # validates with dummy secrets
+# deploy: set ENRICHMENT_ENV_FILE, PRICER_ENV_FILE, RABBITMQ_*, MYSQL_*
+# then: make up-prod TAG=$TAG ...
 ```
 
 Local infra ports bind to `127.0.0.1` only (see `compose.override.yaml`).

@@ -1,23 +1,24 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help up down logs build test test-int lint format install config-prod up-prod migrate
+.PHONY: help up down logs build test test-int lint format install config-prod up-prod migrate migrate-docker
 
 POETRY ?= poetry
 
 help:
 	@echo "AutoPulse targets:"
-	@echo "  make install     - Poetry monorepo install (shared root venv)"
-	@echo "  make up          - local compose (compose.yaml + override)"
-	@echo "  make down        - stop and remove containers"
-	@echo "  make build       - rebuild local service images"
-	@echo "  make logs        - follow compose logs"
-	@echo "  make migrate     - alembic upgrade head (pricer MySQL)"
-	@echo "  make config-prod - validate compose.yaml + compose.prod.yaml"
-	@echo "  make up-prod     - prod overlay (requires TAG=...)"
-	@echo "  make test        - unit tests (skip integration)"
-	@echo "  make test-int    - integration tests (Docker required)"
-	@echo "  make lint        - ruff check + mypy"
-	@echo "  make format      - ruff format (line length 88)"
+	@echo "  make install        - Poetry monorepo install (shared root venv)"
+	@echo "  make up             - local compose (compose.yaml + override)"
+	@echo "  make down           - stop and remove containers"
+	@echo "  make build          - rebuild local service images"
+	@echo "  make logs           - follow compose logs"
+	@echo "  make migrate        - alembic via host Poetry (dev)"
+	@echo "  make migrate-docker - alembic one-off in pricer container (12-factor XII)"
+	@echo "  make config-prod    - validate compose.yaml + compose.prod.yaml"
+	@echo "  make up-prod        - prod overlay (TAG + secrets required)"
+	@echo "  make test           - unit tests (skip integration)"
+	@echo "  make test-int       - integration tests (Docker required)"
+	@echo "  make lint           - ruff check + mypy"
+	@echo "  make format         - ruff format (line length 88)"
 
 install:
 	python scripts/poetry_install.py
@@ -37,11 +38,29 @@ logs:
 migrate:
 	$(POETRY) -C services/pricer run alembic -c alembic.ini upgrade head
 
+migrate-docker:
+	docker compose run --rm --entrypoint "" pricer \
+		alembic -c /app/services/pricer/alembic.ini upgrade head
+
 config-prod:
+	TAG=local \
+	ENRICHMENT_ENV_FILE=.env.prod.example \
+	PRICER_ENV_FILE=.env.prod.example \
+	RABBITMQ_USER=ci RABBITMQ_PASSWORD=ci \
+	MYSQL_ROOT_PASSWORD=ci MYSQL_USER=ci MYSQL_PASSWORD=ci \
+	MYSQL_DATABASE=autopulse_pricing \
 	docker compose -f compose.yaml -f compose.prod.yaml config -q
 
 up-prod:
 	@test -n "$(TAG)" || (echo "TAG is required, e.g. make up-prod TAG=abc1234" && exit 1)
+	@test -n "$(ENRICHMENT_ENV_FILE)" || (echo "ENRICHMENT_ENV_FILE is required" && exit 1)
+	@test -n "$(PRICER_ENV_FILE)" || (echo "PRICER_ENV_FILE is required" && exit 1)
+	@test -n "$(RABBITMQ_USER)" || (echo "RABBITMQ_USER is required" && exit 1)
+	@test -n "$(RABBITMQ_PASSWORD)" || (echo "RABBITMQ_PASSWORD is required" && exit 1)
+	@test -n "$(MYSQL_ROOT_PASSWORD)" || (echo "MYSQL_ROOT_PASSWORD is required" && exit 1)
+	@test -n "$(MYSQL_USER)" || (echo "MYSQL_USER is required" && exit 1)
+	@test -n "$(MYSQL_PASSWORD)" || (echo "MYSQL_PASSWORD is required" && exit 1)
+	@test -n "$(MYSQL_DATABASE)" || (echo "MYSQL_DATABASE is required" && exit 1)
 	docker compose -f compose.yaml -f compose.prod.yaml up -d
 
 test:

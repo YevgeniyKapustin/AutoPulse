@@ -3,15 +3,26 @@
 #   export TAG=$(git rev-parse --short HEAD)
 #   export ENRICHMENT_ENV_FILE=/run/env/enrichment.env
 #   export PRICER_ENV_FILE=/run/env/pricer.env
+#   # host shell must also set datastore bootstrap secrets (no weak defaults):
+#   export RABBITMQ_USER=... RABBITMQ_PASSWORD=...
+#   export MYSQL_ROOT_PASSWORD=... MYSQL_USER=... MYSQL_PASSWORD=... MYSQL_DATABASE=...
 #   docker compose -f compose.yaml -f compose.prod.yaml pull
 #   docker compose -f compose.yaml -f compose.prod.yaml up -d
 #
-# App secrets come from env_file (not image layers / not hardcoded
-# environment: defaults). Datastore bootstrap vars still interpolate from
-# the host shell or a project .env next to these compose files.
+# App secrets come from required env_file paths. Datastore bootstrap vars
+# interpolate from the host shell — missing/empty values fail compose parse.
+
+x-app-env: &app-env
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
 
 services:
   rabbitmq:
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?set RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
     logging: &json-log
       driver: json-file
       options:
@@ -22,14 +33,66 @@ services:
     logging: *json-log
 
   mysql:
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?set MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER:?set MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "127.0.0.1",
+          "-u${MYSQL_USER:?set MYSQL_USER}",
+          "-p${MYSQL_PASSWORD:?set MYSQL_PASSWORD}",
+        ]
     logging: *json-log
 
   enrichment:
     image: ghcr.io/yevgeniykapustin/autopulse-enrichment:${TAG:?set TAG to git sha or semver}
     pull_policy: always
+    environment:
+      <<: *app-env
+      RUN_MODE: api
     env_file:
-      - path: ${ENRICHMENT_ENV_FILE:-.env.prod.example}
-        required: false
+      - path: ${ENRICHMENT_ENV_FILE:?set ENRICHMENT_ENV_FILE}
+        required: true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    logging: *json-log
+
+  enrichment-worker:
+    image: ghcr.io/yevgeniykapustin/autopulse-enrichment:${TAG:?set TAG to git sha or semver}
+    pull_policy: always
+    restart: unless-stopped
+    stop_grace_period: 25s
+    environment:
+      <<: *app-env
+      RUN_MODE: worker
+      RABBITMQ_CONNECTION_NAME: autopulse-enrichment-worker
+    env_file:
+      - path: ${ENRICHMENT_ENV_FILE:?set ENRICHMENT_ENV_FILE}
+        required: true
+    command:
+      [
+        "python",
+        "-m",
+        "services.enrichment.app.worker",
+      ]
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      disable: true
     deploy:
       resources:
         limits:
@@ -40,9 +103,45 @@ services:
   pricer:
     image: ghcr.io/yevgeniykapustin/autopulse-pricer:${TAG:?set TAG to git sha or semver}
     pull_policy: always
+    environment:
+      <<: *app-env
+      RUN_MODE: api
     env_file:
-      - path: ${PRICER_ENV_FILE:-.env.prod.example}
-        required: false
+      - path: ${PRICER_ENV_FILE:?set PRICER_ENV_FILE}
+        required: true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging: *json-log
+
+  pricer-worker:
+    image: ghcr.io/yevgeniykapustin/autopulse-pricer:${TAG:?set TAG to git sha or semver}
+    pull_policy: always
+    restart: unless-stopped
+    stop_grace_period: 25s
+    environment:
+      <<: *app-env
+      RUN_MODE: worker
+      RABBITMQ_CONNECTION_NAME: autopulse-pricer-worker
+    env_file:
+      - path: ${PRICER_ENV_FILE:?set PRICER_ENV_FILE}
+        required: true
+    command:
+      [
+        "python",
+        "-m",
+        "services.pricer.app.worker",
+      ]
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      disable: true
     deploy:
       resources:
         limits:

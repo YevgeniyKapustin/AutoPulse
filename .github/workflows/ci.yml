@@ -10,6 +10,8 @@ env:
   TAG: ci-${{ github.sha }}
   POETRY_VERSION: "2.1.1"
   POETRY_VIRTUALENVS_IN_PROJECT: "true"
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: yevgeniykapustin
 
 jobs:
   lint-and-test:
@@ -69,15 +71,35 @@ jobs:
       - name: Validate production compose merge
         env:
           TAG: ci-${{ github.sha }}
+          ENRICHMENT_ENV_FILE: .env.prod.example
+          PRICER_ENV_FILE: .env.prod.example
+          RABBITMQ_USER: ci
+          RABBITMQ_PASSWORD: ci
+          MYSQL_ROOT_PASSWORD: ci
+          MYSQL_USER: ci
+          MYSQL_PASSWORD: ci
+          MYSQL_DATABASE: autopulse_pricing
         run: docker compose -f compose.yaml -f compose.prod.yaml config -q
 
   docker-build:
     runs-on: ubuntu-latest
+    needs: [lint-and-test, compose-config]
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build enrichment image
         uses: docker/build-push-action@v6
@@ -85,8 +107,10 @@ jobs:
           context: .
           file: services/enrichment/Dockerfile
           target: runtime
-          push: false
-          tags: autopulse-enrichment:${{ env.TAG }}
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/autopulse-enrichment:${{ env.TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/autopulse-enrichment:sha-${{ github.sha }}
           cache-from: type=gha,scope=enrichment
           cache-to: type=gha,mode=max,scope=enrichment
 
@@ -96,7 +120,9 @@ jobs:
           context: .
           file: services/pricer/Dockerfile
           target: runtime
-          push: false
-          tags: autopulse-pricer:${{ env.TAG }}
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/autopulse-pricer:${{ env.TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/autopulse-pricer:sha-${{ github.sha }}
           cache-from: type=gha,scope=pricer
           cache-to: type=gha,mode=max,scope=pricer
