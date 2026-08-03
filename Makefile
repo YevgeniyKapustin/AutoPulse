@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := help
+
 .PHONY: help up down logs build test test-int lint format install config-prod up-prod migrate
 
 POETRY ?= poetry
