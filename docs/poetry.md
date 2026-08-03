@@ -28,8 +28,10 @@ python scripts/poetry_install.py
 # or: make install
 ```
 
-This installs root tools + shared, then points both services at the same
-root `.venv` so cross-service unit/e2e tests can run. Images stay isolated.
+This installs root tools + shared into `.venv`, then `pip install`s each
+service’s locked main deps into that same env (Poetry’s
+`virtualenvs.create=false` would otherwise target the base interpreter).
+Images stay isolated via per-service Docker builds.
 
 ## Commands
 
