@@ -1,0 +1,105 @@
+# Vector: Docker stdout JSON → ClickHouse batch insert.
+# Filtered by label com.autopulse.logs=true on app containers.
+
+data_dir: /var/lib/vector
+
+sources:
+  app_docker_logs:
+    type: docker_logs
+    include_labels:
+      - com.autopulse.logs=true
+
+transforms:
+  parse_json:
+    type: remap
+    inputs: [app_docker_logs]
+    source: |
+      raw_message = to_string(.message) ?? ""
+      .raw = raw_message
+
+      parsed, err = parse_json(raw_message)
+
+      label_service = ""
+      if exists(.label) && is_object(.label) {
+        label_service = to_string(.label."com.autopulse.service") ?? ""
+      }
+
+      if err != null || !is_object(parsed) {
+        .service = label_service
+        if .service == "" { .service = "unknown" }
+        .environment = get_env_var("AUTOPULSE_ENVIRONMENT") ?? "local"
+        .level = "info"
+        .event = raw_message
+        .trace_id = ""
+        .user_id = null
+        .timestamp = now()
+        .attributes = {}
+      } else {
+        p = object!(parsed)
+
+        .service = to_string(p.service) ?? label_service
+        if .service == "" { .service = "unknown" }
+
+        .environment = to_string(p.environment) ?? get_env_var("AUTOPULSE_ENVIRONMENT") ?? "local"
+        .level = downcase(to_string(p.level) ?? "info")
+        .event = to_string(p.event) ?? to_string(p.msg) ?? ""
+        .trace_id = to_string(p.trace_id) ?? to_string(p.request_id) ?? ""
+
+        if exists(p.user_id) {
+          .user_id = to_int(p.user_id) ?? null
+        } else {
+          .user_id = null
+        }
+
+        ts, ts_err = parse_timestamp(to_string(p.timestamp) ?? "", format: "%+")
+        if ts_err == null {
+          .timestamp = ts
+        } else {
+          .timestamp = now()
+        }
+
+        reserved = [
+          "timestamp", "level", "service", "environment", "event", "trace_id",
+          "user_id", "attributes", "raw", "msg", "logger", "exc_info"
+        ]
+        attrs = {}
+        for_each(p) -> |key, value| {
+          if !includes(reserved, key) {
+            attrs = set!(attrs, [key], to_string(value) ?? "")
+          }
+        }
+        .attributes = attrs
+      }
+
+      del(.message)
+      del(.msg)
+      del(.label)
+      del(.container_id)
+      del(.container_name)
+      del(.container_created_at)
+      del(.image)
+      del(.source_type)
+      del(.host)
+      del(.stream)
+      del(.driver)
+
+sinks:
+  clickhouse_out:
+    type: clickhouse
+    inputs: [parse_json]
+    endpoint: ${CLICKHOUSE_ENDPOINT}
+    database: logs
+    table: python_app_logs
+    auth:
+      strategy: basic
+      user: ${CLICKHOUSE_USER}
+      password: ${CLICKHOUSE_PASSWORD}
+    skip_unknown_fields: true
+    date_time_best_effort: true
+    batch:
+      max_events: 10000
+      timeout_secs: 5
+    buffer:
+      type: disk
+      max_size: 268435488
+      when_full: block

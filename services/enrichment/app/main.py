@@ -25,7 +25,11 @@ from services.enrichment.app.runtime import (
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    setup_logging(settings.log_level)
+    setup_logging(
+        settings.log_level,
+        service="enrichment",
+        environment=settings.environment,
+    )
     mode = settings.run_mode
     if mode == "worker":
         raise RuntimeError(

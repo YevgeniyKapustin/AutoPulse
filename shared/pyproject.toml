@@ -10,6 +10,7 @@ packages = [{ include = "autopulse_shared" }]
 python = ">=3.12,<3.14"
 pydantic = "^2.7"
 pydantic-settings = "^2.3"
+structlog = "^24.4"
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

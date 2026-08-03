@@ -24,7 +24,11 @@ from services.pricer.app.runtime import (
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    setup_logging(settings.log_level)
+    setup_logging(
+        settings.log_level,
+        service="pricer",
+        environment=settings.environment,
+    )
     mode = settings.run_mode
     if mode == "worker":
         raise RuntimeError(

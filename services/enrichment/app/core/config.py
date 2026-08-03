@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     enrichment_host: str = "0.0.0.0"
     enrichment_port: int = 8001
     log_level: str = "INFO"
+    environment: str = "local"
     # api = HTTP + publisher; worker = consumer only; all = both (local DX)
     run_mode: Literal["api", "worker", "all"] = "all"
 

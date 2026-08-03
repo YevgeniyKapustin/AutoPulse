@@ -14,6 +14,7 @@ from aio_pika.abc import (
     AbstractRobustConnection,
 )
 
+from autopulse_shared.logging import bind_trace_context, clear_contextvars
 from autopulse_shared.schemas.events import ListingEnrichedEvent
 from services.pricer.app.core.config import Settings
 from services.pricer.app.core.metrics import METRICS
@@ -132,22 +133,38 @@ class EnrichedListingConsumer:
 
     async def handle_message(self, body: bytes) -> None:
         event = ListingEnrichedEvent.model_validate_json(body)
-        logger.info(
-            "Pricing external_id=%s event_id=%s retry=%s",
-            event.listing.external_id,
-            event.event_id,
-            event.retry_count,
-            extra={"event_id": event.event_id, "request_id": event.request_id},
+        clear_contextvars()
+        bind_trace_context(
+            trace_id=event.request_id or event.event_id,
+            request_id=event.request_id,
+            event_id=event.event_id,
+            external_id=event.listing.external_id,
         )
-        if self._inbox is not None and not await self._inbox.try_claim_event(
-            event.event_id
-        ):
-            logger.info("Skipping duplicate pricing event_id=%s", event.event_id)
-            METRICS.inc("autopulse_consumer_duplicates_total", service="pricer")
-            return
-        await self._pricing.price(event.listing, event_id=event.event_id)
-        if self._outbox_publisher is not None:
-            await self._outbox_publisher.drain()
+        try:
+            logger.info(
+                "Pricing external_id=%s event_id=%s retry=%s",
+                event.listing.external_id,
+                event.event_id,
+                event.retry_count,
+                extra={"event_id": event.event_id, "request_id": event.request_id},
+            )
+            if self._inbox is not None and not await self._inbox.try_claim_event(
+                event.event_id
+            ):
+                logger.info(
+                    "Skipping duplicate pricing event_id=%s",
+                    event.event_id,
+                )
+                METRICS.inc(
+                    "autopulse_consumer_duplicates_total",
+                    service="pricer",
+                )
+                return
+            await self._pricing.price(event.listing, event_id=event.event_id)
+            if self._outbox_publisher is not None:
+                await self._outbox_publisher.drain()
+        finally:
+            clear_contextvars()
 
     async def _requeue_with_retry(
         self,

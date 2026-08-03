@@ -38,6 +38,8 @@ Uses `compose.yaml` + `compose.override.yaml` (host ports, bind mounts, reload).
 - Pricer health: http://localhost:8002/health
 - RabbitMQ UI: http://localhost:15672 (`autopulse` / `autopulse`)
 
+Optional logs stack: `make up-observability` — see [docs/logging.md](docs/logging.md).
+
 Production overlay (registry images, no DB ports): see [docs/docker.md](docs/docker.md).
 RabbitMQ production checklist: [docs/messaging.md](docs/messaging.md).
 

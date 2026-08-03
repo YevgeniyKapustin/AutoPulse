@@ -67,3 +67,11 @@ services:
         "8002",
         "--reload",
       ]
+
+  clickhouse:
+    ports:
+      - "127.0.0.1:8123:8123"
+
+  grafana:
+    ports:
+      - "127.0.0.1:3000:3000"

@@ -18,6 +18,7 @@ from aio_pika.abc import (
     AbstractRobustConnection,
 )
 
+from autopulse_shared.logging import bind_trace_context, clear_contextvars
 from autopulse_shared.schemas.events import RawListingEvent
 from services.enrichment.app.core.config import Settings
 from services.enrichment.app.core.metrics import METRICS
@@ -150,20 +151,38 @@ class RawListingConsumer:
 
     async def handle_message(self, body: bytes) -> None:
         event = RawListingEvent.model_validate_json(body)
-        if self._inbox is not None and not await self._inbox.try_claim(event.event_id):
-            logger.info(
-                "Skipping duplicate enrichment event_id=%s",
-                event.event_id,
-                extra={"event_id": event.event_id, "request_id": event.request_id},
-            )
-            METRICS.inc("autopulse_consumer_duplicates_total", service="enrichment")
-            return
-        await self._orchestrator.enrich(
-            event.listing,
-            event_id=event.event_id,
+        clear_contextvars()
+        bind_trace_context(
+            trace_id=event.request_id or event.event_id,
             request_id=event.request_id,
-            retry_count=event.retry_count,
+            event_id=event.event_id,
+            external_id=event.listing.external_id,
         )
+        try:
+            if self._inbox is not None and not await self._inbox.try_claim(
+                event.event_id
+            ):
+                logger.info(
+                    "Skipping duplicate enrichment event_id=%s",
+                    event.event_id,
+                    extra={
+                        "event_id": event.event_id,
+                        "request_id": event.request_id,
+                    },
+                )
+                METRICS.inc(
+                    "autopulse_consumer_duplicates_total",
+                    service="enrichment",
+                )
+                return
+            await self._orchestrator.enrich(
+                event.listing,
+                event_id=event.event_id,
+                request_id=event.request_id,
+                retry_count=event.retry_count,
+            )
+        finally:
+            clear_contextvars()
 
     async def _requeue_with_retry(
         self,

@@ -7,6 +7,7 @@
 | `compose.yaml` | Base stack: pinned images, networks, healthchecks, discovery env |
 | `compose.override.yaml` | Local only (auto-merged): `127.0.0.1` ports, bind mounts, `--reload` |
 | `compose.prod.yaml` | Prod overlay: GHCR images by `TAG`, API + worker, fail-closed secrets |
+| `deploy/observability/` | ClickHouse init, Vector, Grafana provisioning |
 | `.dockerignore` | Keeps `.git` / `.env` / caches out of build context |
 | `services/*/Dockerfile` | Multi-stage, non-root `appuser`, Python healthcheck |
 
@@ -46,6 +47,13 @@ docker compose config   # validate merge
 
 `--reload` restarts the process on code change; lifespan shutdown stops
 consumers and closes aio_pika channels.
+
+Logging stack (ClickHouse + Vector + Grafana) is opt-in:
+
+```bash
+make up-observability
+# see docs/logging.md
+```
 
 ## Production
 
@@ -95,5 +103,5 @@ docker compose run --rm --entrypoint "" pricer \
 | VIII | Concurrency | Scale API and worker replicas independently |
 | IX | Disposability | Fast health; graceful stop < `stop_grace_period` |
 | X | Dev/prod parity | Same Dockerfiles; override only for local ports/reload |
-| XI | Logs | JSON on stdout; ship/collect externally |
+| XI | Logs | JSON stdout → Vector → ClickHouse (profile `observability`) |
 | XII | Admin processes | `make migrate-docker` against the pricer image |

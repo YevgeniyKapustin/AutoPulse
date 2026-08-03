@@ -1,30 +1,34 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help up down logs build test test-int lint format install config-prod up-prod migrate migrate-docker
+.PHONY: help up up-observability down logs build test test-int lint format install config-prod up-prod migrate migrate-docker
 
 POETRY ?= poetry
 
 help:
 	@echo "AutoPulse targets:"
-	@echo "  make install        - Poetry monorepo install (shared root venv)"
-	@echo "  make up             - local compose (compose.yaml + override)"
-	@echo "  make down           - stop and remove containers"
-	@echo "  make build          - rebuild local service images"
-	@echo "  make logs           - follow compose logs"
-	@echo "  make migrate        - alembic via host Poetry (dev)"
-	@echo "  make migrate-docker - alembic one-off in pricer container (12-factor XII)"
-	@echo "  make config-prod    - validate compose.yaml + compose.prod.yaml"
-	@echo "  make up-prod        - prod overlay (TAG + secrets required)"
-	@echo "  make test           - unit tests (skip integration)"
-	@echo "  make test-int       - integration tests (Docker required)"
-	@echo "  make lint           - ruff check + mypy"
-	@echo "  make format         - ruff format (line length 88)"
+	@echo "  make install           - Poetry monorepo install (shared root venv)"
+	@echo "  make up                - local compose (compose.yaml + override)"
+	@echo "  make up-observability  - local stack + ClickHouse/Vector/Grafana"
+	@echo "  make down              - stop and remove containers"
+	@echo "  make build             - rebuild local service images"
+	@echo "  make logs              - follow compose logs"
+	@echo "  make migrate           - alembic via host Poetry (dev)"
+	@echo "  make migrate-docker    - alembic one-off in pricer container"
+	@echo "  make config-prod       - validate compose.yaml + compose.prod.yaml"
+	@echo "  make up-prod           - prod overlay (TAG + secrets required)"
+	@echo "  make test              - unit tests (skip integration)"
+	@echo "  make test-int          - integration tests (Docker required)"
+	@echo "  make lint              - ruff check + mypy"
+	@echo "  make format            - ruff format (line length 88)"
 
 install:
 	python scripts/poetry_install.py
 
 up:
 	docker compose up -d --build
+
+up-observability:
+	docker compose --profile observability up -d --build
 
 down:
 	docker compose down
@@ -49,6 +53,8 @@ config-prod:
 	RABBITMQ_USER=ci RABBITMQ_PASSWORD=ci \
 	MYSQL_ROOT_PASSWORD=ci MYSQL_USER=ci MYSQL_PASSWORD=ci \
 	MYSQL_DATABASE=autopulse_pricing \
+	CLICKHOUSE_USER=ci CLICKHOUSE_PASSWORD=ci \
+	GRAFANA_ADMIN_USER=ci GRAFANA_ADMIN_PASSWORD=ci \
 	docker compose -f compose.yaml -f compose.prod.yaml config -q
 
 up-prod:
@@ -61,6 +67,10 @@ up-prod:
 	@test -n "$(MYSQL_USER)" || (echo "MYSQL_USER is required" && exit 1)
 	@test -n "$(MYSQL_PASSWORD)" || (echo "MYSQL_PASSWORD is required" && exit 1)
 	@test -n "$(MYSQL_DATABASE)" || (echo "MYSQL_DATABASE is required" && exit 1)
+	@test -n "$(CLICKHOUSE_USER)" || (echo "CLICKHOUSE_USER is required" && exit 1)
+	@test -n "$(CLICKHOUSE_PASSWORD)" || (echo "CLICKHOUSE_PASSWORD is required" && exit 1)
+	@test -n "$(GRAFANA_ADMIN_USER)" || (echo "GRAFANA_ADMIN_USER is required" && exit 1)
+	@test -n "$(GRAFANA_ADMIN_PASSWORD)" || (echo "GRAFANA_ADMIN_PASSWORD is required" && exit 1)
 	docker compose -f compose.yaml -f compose.prod.yaml up -d
 
 test:

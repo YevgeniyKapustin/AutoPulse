@@ -57,6 +57,10 @@ services:
     environment:
       <<: *app-env
       RUN_MODE: api
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: enrichment
     env_file:
       - path: ${ENRICHMENT_ENV_FILE:?set ENRICHMENT_ENV_FILE}
         required: true
@@ -75,7 +79,11 @@ services:
     environment:
       <<: *app-env
       RUN_MODE: worker
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       RABBITMQ_CONNECTION_NAME: autopulse-enrichment-worker
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: enrichment
     env_file:
       - path: ${ENRICHMENT_ENV_FILE:?set ENRICHMENT_ENV_FILE}
         required: true
@@ -106,6 +114,10 @@ services:
     environment:
       <<: *app-env
       RUN_MODE: api
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: pricer
     env_file:
       - path: ${PRICER_ENV_FILE:?set PRICER_ENV_FILE}
         required: true
@@ -124,7 +136,11 @@ services:
     environment:
       <<: *app-env
       RUN_MODE: worker
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       RABBITMQ_CONNECTION_NAME: autopulse-pricer-worker
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: pricer
     env_file:
       - path: ${PRICER_ENV_FILE:?set PRICER_ENV_FILE}
         required: true
@@ -147,4 +163,29 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
+    logging: *json-log
+
+  clickhouse:
+    environment:
+      CLICKHOUSE_DB: logs
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    logging: *json-log
+
+  vector:
+    environment:
+      CLICKHOUSE_ENDPOINT: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
+      AUTOPULSE_ENVIRONMENT: ${ENVIRONMENT:-production}
+    logging: *json-log
+
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?set GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
     logging: *json-log

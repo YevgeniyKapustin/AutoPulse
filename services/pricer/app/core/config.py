@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     pricer_host: str = "0.0.0.0"
     pricer_port: int = 8002
     log_level: str = "INFO"
+    environment: str = "local"
     # api = HTTP only; worker = consumer only; all = both (local DX)
     run_mode: Literal["api", "worker", "all"] = "all"
 

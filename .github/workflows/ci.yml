@@ -68,6 +68,9 @@ jobs:
       - name: Validate local compose merge
         run: docker compose -f compose.yaml -f compose.override.yaml config -q
 
+      - name: Validate local compose with observability profile
+        run: docker compose -f compose.yaml -f compose.override.yaml --profile observability config -q
+
       - name: Validate production compose merge
         env:
           TAG: ci-${{ github.sha }}
@@ -79,7 +82,11 @@ jobs:
           MYSQL_USER: ci
           MYSQL_PASSWORD: ci
           MYSQL_DATABASE: autopulse_pricing
-        run: docker compose -f compose.yaml -f compose.prod.yaml config -q
+          CLICKHOUSE_USER: ci
+          CLICKHOUSE_PASSWORD: ci
+          GRAFANA_ADMIN_USER: ci
+          GRAFANA_ADMIN_PASSWORD: ci
+        run: docker compose -f compose.yaml -f compose.prod.yaml --profile observability config -q
 
   docker-build:
     runs-on: ubuntu-latest

@@ -20,7 +20,11 @@ logger = logging.getLogger(__name__)
 
 async def _run() -> None:
     settings = get_settings()
-    setup_logging(settings.log_level)
+    setup_logging(
+        settings.log_level,
+        service="pricer",
+        environment=settings.environment,
+    )
     runtime = await build_runtime(settings)
     await start_consumer(runtime)
     stop = asyncio.Event()

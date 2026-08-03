@@ -75,6 +75,10 @@ services:
     stop_grace_period: 25s
     environment:
       <<: *app-env
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: enrichment
     networks: [backend]
     depends_on:
       rabbitmq:
@@ -99,6 +103,10 @@ services:
     stop_grace_period: 25s
     environment:
       <<: *app-env
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: pricer
     networks: [backend]
     depends_on:
       rabbitmq:
@@ -118,6 +126,69 @@ services:
       retries: 3
       start_period: 25s
 
+  clickhouse:
+    profiles: [observability]
+    image: clickhouse/clickhouse-server:24.8
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: logs
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-autopulse}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-autopulse}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./deploy/observability/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks: [backend]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8123/ping || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  vector:
+    profiles: [observability]
+    image: timberio/vector:0.41.1-alpine
+    restart: unless-stopped
+    user: "0:0"
+    command: ["--config", "/etc/vector/vector.yaml"]
+    environment:
+      CLICKHOUSE_ENDPOINT: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-autopulse}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-autopulse}
+      AUTOPULSE_ENVIRONMENT: ${ENVIRONMENT:-local}
+    volumes:
+      - ./deploy/observability/vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - vector_data:/var/lib/vector
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [backend]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      GF_USERS_DEFAULT_THEME: light
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-autopulse}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-autopulse}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks: [backend]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
 networks:
   backend:
     driver: bridge
@@ -126,3 +197,6 @@ volumes:
   rabbitmq_data:
   mongodb_data:
   mysql_data:
+  clickhouse_data:
+  vector_data:
+  grafana_data:
