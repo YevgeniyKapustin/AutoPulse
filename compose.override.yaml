@@ -48,6 +48,8 @@ services:
     image: autopulse-pricer:local
     ports:
       - "8002:8002"
+    environment:
+      AUTO_CREATE_TABLES: "true"
     env_file:
       - path: .env
         required: false

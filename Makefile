@@ -1,4 +1,4 @@
-.PHONY: help up down logs build test lint format install config-prod up-prod
+.PHONY: help up down logs build test lint format install config-prod up-prod migrate
 
 help:
 	@echo "AutoPulse targets:"
@@ -7,6 +7,7 @@ help:
 	@echo "  make down        - stop and remove containers"
 	@echo "  make build       - rebuild local service images"
 	@echo "  make logs        - follow compose logs"
+	@echo "  make migrate     - alembic upgrade head (pricer MySQL)"
 	@echo "  make config-prod - validate compose.yaml + compose.prod.yaml"
 	@echo "  make up-prod     - prod overlay (requires TAG=...)"
 	@echo "  make test        - run pytest for both services"
@@ -29,6 +30,9 @@ build:
 
 logs:
 	docker compose logs -f
+
+migrate:
+	alembic -c services/pricer/alembic.ini upgrade head
 
 config-prod:
 	docker compose -f compose.yaml -f compose.prod.yaml config -q
