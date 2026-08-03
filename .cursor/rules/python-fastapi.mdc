@@ -1,0 +1,23 @@
+---
+description: FastAPI / asyncio conventions for AutoPulse services
+globs: services/**/*.py
+alwaysApply: false
+---
+
+# FastAPI & asyncio
+
+- Pydantic v2 models on all request/response and event boundaries.
+- Keep routers thin; business logic in `services/`, I/O in `repositories/`.
+- Always attach/propagate `X-Request-ID` (see `core/middleware.py`).
+- Consumers belong in `consumers/`; do not start brokers inside route handlers.
+- Use `Settings` from `core/config.py` via `get_settings()` — no scattered env reads.
+- Never call Pillow/OpenCV/sync HTTP SDKs directly on the event loop.
+
+```python
+# ❌ BAD
+def handle():
+    Image.open(path).resize((512, 512))
+
+# ✅ GOOD
+await asyncio.to_thread(process_image, path)
+```

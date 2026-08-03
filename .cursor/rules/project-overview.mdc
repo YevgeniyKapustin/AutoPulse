@@ -1,0 +1,14 @@
+---
+description: AutoPulse project overview and non-negotiables for every session
+alwaysApply: true
+---
+
+# AutoPulse core
+
+- Two services: `services/enrichment` (Mongo + LLM/CV) and `services/pricer`
+  (MySQL + margin rules), talking over RabbitMQ topic exchange.
+- Shared contracts live in `shared/autopulse_shared/schemas/`.
+- Ack enrichment only after LLM + CV + durable Mongo upsert.
+- Offload blocking CV/SDK work with `asyncio.to_thread`.
+- Follow `docs/roadmap.md`; extend `TODO(week-N)` stubs instead of parallel code.
+- English in code; max line length 100; SOLID layering (api → services → repos).

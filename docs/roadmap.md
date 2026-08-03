@@ -1,0 +1,43 @@
+# Roadmap (2–3 weeks)
+
+Track progress by checking boxes. Agents should pick the next unchecked
+item in the current week unless the user redirects.
+
+## Week 1 — Infra & Data Enrichment
+
+- [x] Docker Compose: RabbitMQ, MongoDB, MySQL, service stubs
+- [x] Enrichment FastAPI skeleton + request-id middleware
+- [x] Shared Pydantic contracts
+- [ ] aio_pika consumer for `car.raw.created`
+- [ ] Topic exchange + queue + DLQ declarations
+- [ ] Motor upsert for listing state
+- [ ] LLM extract options (real provider or record/replay stub)
+- [ ] CV pipeline via `asyncio.to_thread` (Pillow ± YOLO)
+- [ ] Ack-on-aggregation + failure / DLQ path
+- [ ] Circuit breaker wired on LLM calls
+
+## Week 2 — Market Pricer & databases
+
+- [x] Pricer FastAPI skeleton + margin rule engine baseline
+- [x] SQLAlchemy model for `pricing_results`
+- [ ] aio_pika consumer for `car.enriched.success`
+- [ ] Async MySQL repository (SQLAlchemy 2)
+- [ ] Alembic migrations (optional but preferred)
+- [ ] End-to-end: raw → enriched → priced
+- [ ] Optional: simple sklearn regressor behind same interface
+
+## Week 3 — Reliability, tests, CI
+
+- [x] GitHub Actions scaffold (lint + unit tests)
+- [ ] Unit tests for orchestrator / rules / breaker
+- [ ] Integration tests with testcontainers (RabbitMQ, Mongo, MySQL)
+- [ ] Harden Dockerfiles (non-root, healthchecks)
+- [ ] Polish README runbook + Mermaid diagram
+- [ ] Sample curl / event fixtures under `docs/fixtures/`
+
+## Stretch (after MVP)
+
+- [ ] Optional orchestrator UI / admin API
+- [ ] Metrics (Prometheus) and structured logs
+- [ ] Real watermark / plate heuristics
+- [ ] Multi-source crawler adapters

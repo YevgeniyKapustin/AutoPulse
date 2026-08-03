@@ -1,0 +1,15 @@
+---
+description: RabbitMQ topic, DLQ, and ack-on-aggregation patterns
+globs: "**/consumers/**/*.py"
+alwaysApply: false
+---
+
+# Messaging
+
+- Exchange: topic `autopulse.cars`.
+- Keys: `car.raw.created`, `car.enriched.success`, `car.enrichment.failed`,
+  `car.enrichment.dlq`.
+- Declare durable queues with dead-letter routing for enrichment.
+- Enrichment: ack only after full aggregation + successful outbound publish.
+- Increment `retry_count` on redelivery; move to DLQ when threshold hit.
+- Prefer idempotent handlers keyed by `external_id` / `event_id`.
