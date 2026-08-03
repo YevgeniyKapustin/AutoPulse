@@ -1,24 +1,17 @@
 # Base stack — shared by local override and compose.prod.yaml.
 # Local:  docker compose up -d --build
-# Prod:   docker compose -f compose.yaml -f compose.prod.yaml up -d
+# Prod:   TAG=... docker compose -f compose.yaml -f compose.prod.yaml up -d
+#
+# Only service-discovery values live under environment: so env_file secrets
+# (compose.override / compose.prod) are not overridden by YAML defaults.
 
 name: autopulse
 
 x-app-env: &app-env
   RABBITMQ_HOST: rabbitmq
-  RABBITMQ_PORT: 5672
-  RABBITMQ_USER: ${RABBITMQ_USER:-autopulse}
-  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-autopulse}
-  RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
-  RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-autopulse.cars}
-  MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017}
-  MONGODB_DB: ${MONGODB_DB:-autopulse}
+  RABBITMQ_PORT: "5672"
   MYSQL_HOST: mysql
-  MYSQL_PORT: 3306
-  MYSQL_USER: ${MYSQL_USER:-autopulse}
-  MYSQL_PASSWORD: ${MYSQL_PASSWORD:-autopulse}
-  MYSQL_DATABASE: ${MYSQL_DATABASE:-autopulse_pricing}
-  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  MYSQL_PORT: "3306"
 
 services:
   rabbitmq:
@@ -81,9 +74,6 @@ services:
     restart: unless-stopped
     environment:
       <<: *app-env
-      LLM_API_KEY: ${LLM_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
-      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
     networks: [backend]
     depends_on:
       rabbitmq:
@@ -91,7 +81,13 @@ services:
       mongodb:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')",
+        ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -101,11 +97,6 @@ services:
     restart: unless-stopped
     environment:
       <<: *app-env
-      DEFAULT_TARGET_MARGIN_PCT: ${DEFAULT_TARGET_MARGIN_PCT:-12.0}
-      DEFAULT_TURNOVER_DAYS: ${DEFAULT_TURNOVER_DAYS:-21}
-      AUTO_CREATE_TABLES: ${AUTO_CREATE_TABLES:-false}
-      PRICER_MAX_RETRIES: ${PRICER_MAX_RETRIES:-5}
-      PRICING_ENGINE: ${PRICING_ENGINE:-rules}
     networks: [backend]
     depends_on:
       rabbitmq:
@@ -113,7 +104,13 @@ services:
       mysql:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8002/health"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')",
+        ]
       interval: 10s
       timeout: 3s
       retries: 3

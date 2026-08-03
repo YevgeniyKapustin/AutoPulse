@@ -84,6 +84,8 @@ jobs:
         run: docker compose -f compose.yaml -f compose.override.yaml config -q
 
       - name: Validate production compose merge
+        env:
+          TAG: ci-${{ github.sha }}
         run: docker compose -f compose.yaml -f compose.prod.yaml config -q
 
   docker-build:

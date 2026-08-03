@@ -16,6 +16,8 @@ venv/
 ENV/
 .env
 .env.local
+.env.prod
+.env.*.local
 
 # Testing / coverage
 .pytest_cache/

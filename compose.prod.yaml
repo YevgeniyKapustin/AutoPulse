@@ -1,11 +1,14 @@
-# Production overlay — never use compose.override.yaml on the server.
+# Production overlay — never merge compose.override.yaml on the server.
 #
 #   export TAG=$(git rev-parse --short HEAD)
+#   export ENRICHMENT_ENV_FILE=/run/env/enrichment.env
+#   export PRICER_ENV_FILE=/run/env/pricer.env
 #   docker compose -f compose.yaml -f compose.prod.yaml pull
 #   docker compose -f compose.yaml -f compose.prod.yaml up -d
 #
-# Apps pull immutable images from the registry. Datastores stay on the
-# internal backend network (no host ports).
+# App secrets come from env_file (not image layers / not hardcoded
+# environment: defaults). Datastore bootstrap vars still interpolate from
+# the host shell or a project .env next to these compose files.
 
 services:
   rabbitmq:
@@ -31,7 +34,7 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 512M
+          memory: 1G
     logging: *json-log
 
   pricer:

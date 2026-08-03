@@ -43,7 +43,10 @@ Production overlay (registry images, no DB ports): see [docs/docker.md](docs/doc
 ```bash
 export TAG=$(git rev-parse --short HEAD)
 docker compose -f compose.yaml -f compose.prod.yaml config
+# deploy: make up-prod TAG=$TAG
 ```
+
+Local infra ports bind to `127.0.0.1` only (see `compose.override.yaml`).
 
 Local (Poetry, without Docker app images):
 

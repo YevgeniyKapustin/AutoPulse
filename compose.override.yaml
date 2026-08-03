@@ -1,19 +1,20 @@
-# Local/dev overrides — merged automatically with compose.yaml.
-# Publishes infra ports, builds from Dockerfiles, bind-mounts for reload.
+# Local/dev overrides — auto-merged with compose.yaml only.
+# Never pass this file on a production host (use compose.prod.yaml instead).
+# Infra ports bind to 127.0.0.1 so they are not exposed on LAN/WAN.
 
 services:
   rabbitmq:
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
 
   mongodb:
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
 
   mysql:
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
 
   enrichment:
     build:
@@ -22,7 +23,7 @@ services:
       target: runtime
     image: autopulse-enrichment:local
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     env_file:
       - path: .env
         required: false
@@ -47,7 +48,7 @@ services:
       target: runtime
     image: autopulse-pricer:local
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"
     environment:
       AUTO_CREATE_TABLES: "true"
     env_file:
