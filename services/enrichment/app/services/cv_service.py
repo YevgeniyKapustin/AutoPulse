@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 import httpx
 from PIL import Image, ImageStat
+from pydantic import HttpUrl
 
 from autopulse_shared.schemas.listing import DefectInfo, RawListing
 
@@ -31,17 +32,17 @@ class CvService:
 
         with httpx.Client(timeout=_FETCH_TIMEOUT_SEC, follow_redirects=True) as client:
             for url in urls:
-                url_str = str(url)
                 try:
-                    defects.extend(self._inspect_url(client, url_str))
+                    defects.extend(self._inspect_url(client, url))
                 except Exception as exc:
-                    logger.warning("CV skip %s: %s", url_str, exc)
+                    logger.warning("CV skip %s: %s", url, exc)
         return defects
 
-    def _inspect_url(self, client: httpx.Client, url: str) -> list[DefectInfo]:
-        if urlparse(url).scheme not in {"http", "https"}:
+    def _inspect_url(self, client: httpx.Client, url: HttpUrl) -> list[DefectInfo]:
+        url_str = str(url)
+        if urlparse(url_str).scheme not in {"http", "https"}:
             return []
-        response = client.get(url)
+        response = client.get(url_str)
         if response.status_code >= 400:
             return [
                 DefectInfo(
@@ -52,7 +53,7 @@ class CvService:
             ]
         return self._inspect_bytes(response.content, url)
 
-    def _inspect_bytes(self, data: bytes, url: str) -> list[DefectInfo]:
+    def _inspect_bytes(self, data: bytes, url: HttpUrl) -> list[DefectInfo]:
         with Image.open(io.BytesIO(data)) as image:
             rgb = image.convert("RGB")
             resized = rgb.resize(_RESIZE)

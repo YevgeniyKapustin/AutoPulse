@@ -9,7 +9,12 @@ import logging
 import uuid
 
 import aio_pika
-from aio_pika.abc import AbstractIncomingMessage
+from aio_pika.abc import (
+    AbstractChannel,
+    AbstractIncomingMessage,
+    AbstractQueue,
+    AbstractRobustConnection,
+)
 
 from autopulse_shared.schemas.events import RawListingEvent
 from services.enrichment.app.core.config import Settings
@@ -30,8 +35,9 @@ class RawListingConsumer:
     ) -> None:
         self._settings = settings
         self._orchestrator = orchestrator
-        self._connection: aio_pika.RobustConnection | None = None
-        self._channel: aio_pika.abc.AbstractChannel | None = None
+        self._connection: AbstractRobustConnection | None = None
+        self._channel: AbstractChannel | None = None
+        self._queue: AbstractQueue | None = None
         self._consumer_tag: str | None = None
 
     async def start(self) -> None:
@@ -41,6 +47,7 @@ class RawListingConsumer:
         exchange, queue, _dlq = await declare_topology(self._channel, self._settings)
         publisher = EventPublisher(exchange, self._settings)
         self._orchestrator.set_publisher(publisher)
+        self._queue = queue
         self._consumer_tag = await queue.consume(self._on_message)
         logger.info(
             "RawListingConsumer listening exchange=%s queue=%s",
@@ -50,10 +57,11 @@ class RawListingConsumer:
 
     async def stop(self) -> None:
         try:
-            if self._channel is not None and self._consumer_tag is not None:
-                await self._channel.cancel(self._consumer_tag)
+            if self._queue is not None and self._consumer_tag is not None:
+                await self._queue.cancel(self._consumer_tag)
         finally:
             self._consumer_tag = None
+            self._queue = None
             try:
                 if self._channel is not None and not self._channel.is_closed:
                     await self._channel.close()

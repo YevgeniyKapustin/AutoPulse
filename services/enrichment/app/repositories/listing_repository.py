@@ -12,7 +12,7 @@ from services.enrichment.app.core.exceptions import ListingNotFoundError
 
 
 class ListingRepository:
-    def __init__(self, collection: AsyncIOMotorCollection) -> None:
+    def __init__(self, collection: AsyncIOMotorCollection[dict[str, Any]]) -> None:
         self._collection = collection
 
     @classmethod
@@ -21,8 +21,8 @@ class ListingRepository:
         mongodb_uri: str,
         db_name: str,
         collection_name: str,
-        client: AsyncIOMotorClient | None = None,
-    ) -> tuple[ListingRepository, AsyncIOMotorClient]:
+        client: AsyncIOMotorClient[dict[str, Any]] | None = None,
+    ) -> tuple[ListingRepository, AsyncIOMotorClient[dict[str, Any]]]:
         motor_client = client or AsyncIOMotorClient(mongodb_uri)
         collection = motor_client[db_name][collection_name]
         return cls(collection), motor_client

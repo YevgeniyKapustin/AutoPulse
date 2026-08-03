@@ -5,7 +5,12 @@ from __future__ import annotations
 import logging
 
 import aio_pika
-from aio_pika.abc import AbstractIncomingMessage
+from aio_pika.abc import (
+    AbstractChannel,
+    AbstractIncomingMessage,
+    AbstractQueue,
+    AbstractRobustConnection,
+)
 
 from autopulse_shared.schemas.events import ListingEnrichedEvent
 from services.pricer.app.core.config import Settings
@@ -19,8 +24,9 @@ class EnrichedListingConsumer:
     def __init__(self, settings: Settings, pricing: PricingService) -> None:
         self._settings = settings
         self._pricing = pricing
-        self._connection: aio_pika.RobustConnection | None = None
-        self._channel: aio_pika.abc.AbstractChannel | None = None
+        self._connection: AbstractRobustConnection | None = None
+        self._channel: AbstractChannel | None = None
+        self._queue: AbstractQueue | None = None
         self._consumer_tag: str | None = None
 
     async def start(self) -> None:
@@ -28,6 +34,7 @@ class EnrichedListingConsumer:
         self._channel = await self._connection.channel()
         await self._channel.set_qos(prefetch_count=8)
         _exchange, queue, _dlq = await declare_topology(self._channel, self._settings)
+        self._queue = queue
         self._consumer_tag = await queue.consume(self._on_message)
         logger.info(
             "EnrichedListingConsumer listening exchange=%s queue=%s",
@@ -37,10 +44,11 @@ class EnrichedListingConsumer:
 
     async def stop(self) -> None:
         try:
-            if self._channel is not None and self._consumer_tag is not None:
-                await self._channel.cancel(self._consumer_tag)
+            if self._queue is not None and self._consumer_tag is not None:
+                await self._queue.cancel(self._consumer_tag)
         finally:
             self._consumer_tag = None
+            self._queue = None
             try:
                 if self._channel is not None and not self._channel.is_closed:
                     await self._channel.close()

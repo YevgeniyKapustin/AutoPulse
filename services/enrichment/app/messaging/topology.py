@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-import aio_pika
-from aio_pika import ExchangeType
-from aio_pika.abc import AbstractChannel, AbstractExchange, AbstractRobustQueue
+from aio_pika import ExchangeType, connect_robust as aio_connect_robust
+from aio_pika.abc import (
+    AbstractChannel,
+    AbstractExchange,
+    AbstractQueue,
+    AbstractRobustConnection,
+)
 
 from services.enrichment.app.core.config import Settings
 
@@ -12,7 +16,7 @@ from services.enrichment.app.core.config import Settings
 async def declare_topology(
     channel: AbstractChannel,
     settings: Settings,
-) -> tuple[AbstractExchange, AbstractRobustQueue, AbstractRobustQueue]:
+) -> tuple[AbstractExchange, AbstractQueue, AbstractQueue]:
     exchange = await channel.declare_exchange(
         settings.rabbitmq_exchange,
         ExchangeType.TOPIC,
@@ -34,5 +38,5 @@ async def declare_topology(
     return exchange, queue, dlq
 
 
-async def connect_robust(settings: Settings) -> aio_pika.RobustConnection:
-    return await aio_pika.connect_robust(settings.rabbitmq_url)
+async def connect_robust(settings: Settings) -> AbstractRobustConnection:
+    return await aio_connect_robust(settings.rabbitmq_url)
