@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from services.enrichment.app.api.health import router as health_router
 from services.enrichment.app.api.listings import router as listings_router
+from services.enrichment.app.core.circuit_breaker import CircuitBreaker
 from services.enrichment.app.core.config import get_settings
 from services.enrichment.app.core.logging import setup_logging
 from services.enrichment.app.core.middleware import RequestIdMiddleware
@@ -23,19 +24,32 @@ from services.enrichment.app.services.llm_service import LlmService
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     setup_logging(settings.log_level)
-    orchestrator = EnrichmentOrchestrator(
-        repository=ListingRepository(),
-        llm=LlmService(),
-        cv=CvService(),
+
+    repository, mongo_client = ListingRepository.from_settings(
+        settings.mongodb_uri,
+        settings.mongodb_db,
+        settings.mongodb_collection_listings,
     )
-    consumer = RawListingConsumer(settings)
+    await repository.ensure_indexes()
+
+    llm = LlmService(settings, breaker=CircuitBreaker())
+    cv = CvService()
+    orchestrator = EnrichmentOrchestrator(
+        repository=repository,
+        llm=llm,
+        cv=cv,
+    )
+    consumer = RawListingConsumer(settings, orchestrator)
     await consumer.start()
+
     app.state.orchestrator = orchestrator
     app.state.consumer = consumer
+    app.state.mongo_client = mongo_client
     try:
         yield
     finally:
         await consumer.stop()
+        mongo_client.close()
 
 
 def create_app() -> FastAPI:
