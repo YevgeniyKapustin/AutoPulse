@@ -5,6 +5,10 @@ on:
     branches: [main, master]
   pull_request:
 
+env:
+  PYTHON_VERSION: "3.12"
+  TAG: ci-${{ github.sha }}
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
@@ -13,7 +17,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
       - name: Install packages
@@ -35,3 +39,44 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: >
           pytest shared/tests services/enrichment/tests services/pricer/tests -q
+
+  compose-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate local compose merge
+        run: docker compose -f compose.yaml -f compose.override.yaml config -q
+
+      - name: Validate production compose merge
+        run: docker compose -f compose.yaml -f compose.prod.yaml config -q
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build enrichment image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/enrichment/Dockerfile
+          target: runtime
+          push: false
+          tags: autopulse-enrichment:${{ env.TAG }}
+          cache-from: type=gha,scope=enrichment
+          cache-to: type=gha,mode=max,scope=enrichment
+
+      - name: Build pricer image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/pricer/Dockerfile
+          target: runtime
+          push: false
+          tags: autopulse-pricer:${{ env.TAG }}
+          cache-from: type=gha,scope=pricer
+          cache-to: type=gha,mode=max,scope=pricer

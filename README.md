@@ -25,22 +25,31 @@ flowchart TD
 | MongoDB | 27017 | Per-car enrichment state |
 | MySQL | 3306 | Structured pricing metrics |
 
-## Quick start
+## Quick start (local)
 
 ```bash
 cp .env.example .env
 docker compose up -d --build
 ```
 
+Uses `compose.yaml` + `compose.override.yaml` (host ports, bind mounts, reload).
+
 - Enrichment health: http://localhost:8001/health
 - Pricer health: http://localhost:8002/health
 - RabbitMQ UI: http://localhost:15672 (`autopulse` / `autopulse`)
 
-Local (without Docker services images):
+Production overlay (registry images, no DB ports): see [docs/docker.md](docs/docker.md).
+
+```bash
+export TAG=$(git rev-parse --short HEAD)
+docker compose -f compose.yaml -f compose.prod.yaml config
+```
+
+Local (without Docker app images):
 
 ```bash
 make install
-# start infra only: docker compose up -d rabbitmq mongodb mysql
+docker compose up -d rabbitmq mongodb mysql
 uvicorn services.enrichment.app.main:app --reload --port 8001
 uvicorn services.pricer.app.main:app --reload --port 8002
 ```
@@ -60,14 +69,18 @@ uvicorn services.pricer.app.main:app --reload --port 8002
 services/enrichment/   FastAPI + aio_pika + Motor + LLM/CV
 services/pricer/       FastAPI + aio_pika + SQLAlchemy/MySQL
 shared/                Pydantic event & domain contracts
-docs/                  Architecture, roadmap, ADRs, agent briefs
+docs/                  Architecture, roadmap, ADRs, agent briefs, docker
+compose.yaml           Base stack (pinned images, healthchecks, networks)
+compose.override.yaml  Local ports / bind mounts / reload
+compose.prod.yaml      Registry images by TAG; no DB host ports
 .cursor/rules/         Persistent agent rules
 ```
 
 ## Status
 
-This is a **scaffold**. Consumers, Mongo/MySQL persistence, LLM, and CV are
-stubbed with `TODO(week-N)` markers. See [docs/roadmap.md](docs/roadmap.md).
+Week-1 enrichment pipeline is implemented. Pricer Rabbit/MySQL wiring is next
+(week 2). Docker layout follows the production checklist — see
+[docs/docker.md](docs/docker.md) and [docs/roadmap.md](docs/roadmap.md).
 
 ## Dev commands
 

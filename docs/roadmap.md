@@ -31,8 +31,8 @@ item in the current week unless the user redirects.
 - [x] GitHub Actions scaffold (lint + unit tests)
 - [x] Unit tests for orchestrator / rules / breaker
 - [ ] Integration tests with testcontainers (RabbitMQ, Mongo, MySQL)
-- [ ] Harden Dockerfiles (non-root, healthchecks)
-- [ ] Polish README runbook + Mermaid diagram
+- [x] Harden Dockerfiles (non-root, healthchecks)
+- [x] Polish README runbook + Mermaid diagram
 - [ ] Sample curl / event fixtures under `docs/fixtures/`
 
 ## Stretch (after MVP)
