@@ -32,6 +32,8 @@ services:
       - ./shared:/app/shared
     command:
       [
+        "python",
+        "-m",
         "uvicorn",
         "services.enrichment.app.main:app",
         "--host",
@@ -59,6 +61,8 @@ services:
       - ./shared:/app/shared
     command:
       [
+        "python",
+        "-m",
         "uvicorn",
         "services.pricer.app.main:app",
         "--host",
