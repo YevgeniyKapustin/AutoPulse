@@ -4,14 +4,12 @@ Use these as prompts when starting a focused session.
 
 ## Brief A — Wire enrichment consumer
 
-Implement `RawListingConsumer` with aio_pika: declare topic exchange, durable
-queue, DLQ, consume `car.raw.created`, call orchestrator, ack on aggregation.
-Update `docs/roadmap.md` checkboxes when done.
+~~Implement `RawListingConsumer` with aio_pika…~~ **Done** on
+`feature/week1-enrichment-pipeline`.
 
 ## Brief B — Motor listing repository
 
-Replace `ListingRepository` stub with Motor upsert/get by `external_id`.
-Idempotent. Add a unit test with mongomock or testcontainers.
+~~Replace `ListingRepository` stub…~~ **Done** (Motor + in-memory for tests).
 
 ## Brief C — Pricer MySQL path
 

@@ -13,14 +13,15 @@ uvicorn services.enrichment.app.main:app --reload --port 8001
 
 | Module | Role |
 |--------|------|
-| `app/api/` | Health + listing ingress |
-| `app/consumers/raw_listing_consumer.py` | aio_pika (stub) |
+| `app/consumers/raw_listing_consumer.py` | aio_pika + DLQ retries |
+| `app/messaging/` | Topology + event publisher |
 | `app/services/enrichment_orchestrator.py` | Aggregation coordinator |
-| `app/services/llm_service.py` | Option extraction |
-| `app/services/cv_service.py` | Image / defect detection |
-| `app/repositories/listing_repository.py` | Mongo upsert/get |
+| `app/services/llm_service.py` | Heuristic / OpenAI extraction |
+| `app/services/cv_service.py` | Pillow image heuristics |
+| `app/repositories/listing_repository.py` | Motor upsert/get |
 | `app/core/circuit_breaker.py` | External API breaker |
 
 ## Next TODOs
 
-See week-1 items in `docs/roadmap.md`.
+Week 1 pipeline is implemented. Optional hardening: integration tests with
+testcontainers, real YOLO model swap-in for `CvService`.

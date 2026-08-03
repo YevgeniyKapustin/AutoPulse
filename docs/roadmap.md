@@ -8,13 +8,13 @@ item in the current week unless the user redirects.
 - [x] Docker Compose: RabbitMQ, MongoDB, MySQL, service stubs
 - [x] Enrichment FastAPI skeleton + request-id middleware
 - [x] Shared Pydantic contracts
-- [ ] aio_pika consumer for `car.raw.created`
-- [ ] Topic exchange + queue + DLQ declarations
-- [ ] Motor upsert for listing state
-- [ ] LLM extract options (real provider or record/replay stub)
-- [ ] CV pipeline via `asyncio.to_thread` (Pillow ± YOLO)
-- [ ] Ack-on-aggregation + failure / DLQ path
-- [ ] Circuit breaker wired on LLM calls
+- [x] aio_pika consumer for `car.raw.created`
+- [x] Topic exchange + queue + DLQ declarations
+- [x] Motor upsert for listing state
+- [x] LLM extract options (real provider or record/replay stub)
+- [x] CV pipeline via `asyncio.to_thread` (Pillow ± YOLO)
+- [x] Ack-on-aggregation + failure / DLQ path
+- [x] Circuit breaker wired on LLM calls
 
 ## Week 2 — Market Pricer & databases
 
@@ -29,7 +29,7 @@ item in the current week unless the user redirects.
 ## Week 3 — Reliability, tests, CI
 
 - [x] GitHub Actions scaffold (lint + unit tests)
-- [ ] Unit tests for orchestrator / rules / breaker
+- [x] Unit tests for orchestrator / rules / breaker
 - [ ] Integration tests with testcontainers (RabbitMQ, Mongo, MySQL)
 - [ ] Harden Dockerfiles (non-root, healthchecks)
 - [ ] Polish README runbook + Mermaid diagram
