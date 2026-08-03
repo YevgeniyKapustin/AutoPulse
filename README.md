@@ -45,14 +45,16 @@ export TAG=$(git rev-parse --short HEAD)
 docker compose -f compose.yaml -f compose.prod.yaml config
 ```
 
-Local (without Docker app images):
+Local (Poetry, without Docker app images):
 
 ```bash
-make install
+python scripts/poetry_install.py   # or: make install
 docker compose up -d rabbitmq mongodb mysql
-uvicorn services.enrichment.app.main:app --reload --port 8001
-uvicorn services.pricer.app.main:app --reload --port 8002
+poetry run uvicorn services.enrichment.app.main:app --reload --port 8001
+poetry run uvicorn services.pricer.app.main:app --reload --port 8002
 ```
+
+See [docs/poetry.md](docs/poetry.md) for monorepo dependency isolation.
 
 ## Routing keys
 
@@ -87,5 +89,5 @@ Week-1 enrichment pipeline is implemented. Pricer Rabbit/MySQL wiring is next
 ```bash
 make test
 make lint
-make format   # black shared services
+make format   # ruff format shared services
 ```

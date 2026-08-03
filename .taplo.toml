@@ -1,0 +1,8 @@
+# Taplo / Even Better TOML — include Poetry lockfiles (TOML without .toml).
+# Without this, opening poetry.lock shows: "this document has been excluded".
+
+include = [
+  "**/*.toml",
+  "**/poetry.lock",
+  "**/poetry.toml",
+]

@@ -35,6 +35,7 @@ Checklist highlights covered:
 
 - pinned third-party images (no `:latest`)
 - multi-stage + `USER appuser`
+- Poetry per-service install (no cross-service dep leakage in images)
 - healthchecks + `depends_on: service_healthy`
 - datastores without published ports in prod
 - secrets via env files, not image layers

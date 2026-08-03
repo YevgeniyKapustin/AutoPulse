@@ -1,8 +1,10 @@
 .PHONY: help up down logs build test lint format install config-prod up-prod migrate
 
+POETRY ?= poetry
+
 help:
 	@echo "AutoPulse targets:"
-	@echo "  make install     - install deps (editable monorepo)"
+	@echo "  make install     - Poetry monorepo install (shared root venv)"
 	@echo "  make up          - local compose (compose.yaml + override)"
 	@echo "  make down        - stop and remove containers"
 	@echo "  make build       - rebuild local service images"
@@ -10,14 +12,12 @@ help:
 	@echo "  make migrate     - alembic upgrade head (pricer MySQL)"
 	@echo "  make config-prod - validate compose.yaml + compose.prod.yaml"
 	@echo "  make up-prod     - prod overlay (requires TAG=...)"
-	@echo "  make test        - run pytest for both services"
+	@echo "  make test        - pytest (shared + services)"
 	@echo "  make lint        - ruff check + mypy"
-	@echo "  make format      - black (line length 88)"
+	@echo "  make format      - ruff format (line length 88)"
 
 install:
-	python -m pip install -e "./shared[dev]"
-	python -m pip install -e "./services/enrichment[dev]"
-	python -m pip install -e "./services/pricer[dev]"
+	python scripts/poetry_install.py
 
 up:
 	docker compose up -d --build
@@ -32,7 +32,7 @@ logs:
 	docker compose logs -f
 
 migrate:
-	alembic -c services/pricer/alembic.ini upgrade head
+	$(POETRY) -C services/pricer run alembic -c alembic.ini upgrade head
 
 config-prod:
 	docker compose -f compose.yaml -f compose.prod.yaml config -q
@@ -42,11 +42,11 @@ up-prod:
 	docker compose -f compose.yaml -f compose.prod.yaml up -d
 
 test:
-	pytest services/enrichment/tests services/pricer/tests -q
+	$(POETRY) run pytest shared/tests services/enrichment/tests services/pricer/tests -q
 
 lint:
-	ruff check shared services
-	mypy shared services/enrichment/app services/pricer/app
+	$(POETRY) run ruff check shared services
+	$(POETRY) run mypy
 
 format:
-	black shared services
+	$(POETRY) run ruff format shared services

@@ -18,9 +18,11 @@ slices over incomplete sprawl.
    `asyncio.to_thread()` or a `ThreadPoolExecutor`.
 4. **SOLID** — thin routers, orchestrators coordinate, repositories own I/O,
    domain rules stay free of FastAPI/RabbitMQ.
-5. **Black formatting** — code line length **88**, docstrings/comments
-   **≤ 72**. Run `black shared services` (not `ruff format`). English for
-   code, commits, and agent docs. Comments only when intent is non-obvious.
+5. **Ruff formatting** — code line length **88**, docstrings/comments
+   **≤ 72**. Use `ruff format` (not Black). English for code, commits, and
+   agent docs. Comments only when intent is non-obvious.
+6. **Poetry isolation** — root `pyproject.toml` holds shared + dev tools
+   only. Service runtime deps live in `services/*/pyproject.toml`.
 
 ## Where to work
 
