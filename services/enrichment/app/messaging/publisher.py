@@ -33,6 +33,7 @@ class EventPublisher:
         await self._publish(event, self._settings.routing_key_enrichment_failed)
 
     async def _publish(self, event: BaseModel, routing_key: str) -> None:
+        # model_dump_json (not model_dump) so HttpUrl becomes a plain string.
         body = event.model_dump_json().encode("utf-8")
         message = aio_pika.Message(
             body=body,

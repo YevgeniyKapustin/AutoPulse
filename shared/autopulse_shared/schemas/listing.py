@@ -46,6 +46,12 @@ class RawListing(BaseModel):
 
 
 class EnrichedListing(RawListing):
+    """Raw listing plus enrichment outputs.
+
+    Nullable base fields (make/model/year/…) stay nullable: enrichment may
+    fill them later, but incomplete auction payloads remain valid.
+    """
+
     options: ListingOptions = Field(default_factory=ListingOptions)
     defects: list[DefectInfo] = Field(default_factory=list)
     enrichment_version: str = "0.1.0"

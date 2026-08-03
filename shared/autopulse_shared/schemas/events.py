@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Literal
+from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
@@ -13,7 +15,7 @@ class EventType(StrEnum):
 
 
 class BaseEvent(BaseModel):
-    event_id: str
+    event_id: str = Field(default_factory=lambda: str(uuid4()))
     event_type: EventType
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     request_id: str | None = None
@@ -21,17 +23,17 @@ class BaseEvent(BaseModel):
 
 
 class RawListingEvent(BaseEvent):
-    event_type: EventType = EventType.RAW_CREATED
+    event_type: Literal[EventType.RAW_CREATED] = EventType.RAW_CREATED
     listing: RawListing
 
 
 class ListingEnrichedEvent(BaseEvent):
-    event_type: EventType = EventType.ENRICHED_SUCCESS
+    event_type: Literal[EventType.ENRICHED_SUCCESS] = EventType.ENRICHED_SUCCESS
     listing: EnrichedListing
 
 
 class EnrichmentFailedEvent(BaseEvent):
-    event_type: EventType = EventType.ENRICHMENT_FAILED
+    event_type: Literal[EventType.ENRICHMENT_FAILED] = EventType.ENRICHMENT_FAILED
     external_id: str
     error: str
     stage: str | None = None

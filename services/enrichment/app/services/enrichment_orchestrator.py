@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -68,24 +67,19 @@ class EnrichmentOrchestrator:
         listing: RawListing,
         request_id: str | None = None,
     ) -> str:
-        event_id = str(uuid.uuid4())
-        state = EnrichedListing(**listing.model_dump())
+        state = EnrichedListing.model_validate(listing.model_dump())
         await self._repository.upsert(state)
-        event = RawListingEvent(
-            event_id=event_id,
-            listing=listing,
-            request_id=request_id,
-        )
+        event = RawListingEvent(listing=listing, request_id=request_id)
         if self._publisher is None:
             raise EnrichmentError("Event publisher is not configured", stage="publish")
         await self._publisher.publish_raw(event)
         logger.info(
             "Queued raw listing external_id=%s event_id=%s request_id=%s",
             listing.external_id,
-            event_id,
+            event.event_id,
             request_id,
         )
-        return event_id
+        return event.event_id
 
     async def enrich(
         self,
@@ -105,7 +99,7 @@ class EnrichmentOrchestrator:
             )
             return existing
 
-        state = EnrichedListing(**listing.model_dump())
+        state = EnrichedListing.model_validate(listing.model_dump())
         if existing is not None:
             state.llm_done = existing.llm_done
             state.cv_done = existing.cv_done
@@ -161,16 +155,16 @@ class EnrichmentOrchestrator:
     ) -> None:
         if self._publisher is None:
             return
-        await self._publisher.publish_failed(
-            EnrichmentFailedEvent(
-                event_id=event_id or str(uuid.uuid4()),
-                external_id=external_id,
-                error=error,
-                stage=stage,
-                request_id=request_id,
-                retry_count=retry_count,
-            )
+        failed = EnrichmentFailedEvent(
+            external_id=external_id,
+            error=error,
+            stage=stage,
+            request_id=request_id,
+            retry_count=retry_count,
         )
+        if event_id is not None:
+            failed = failed.model_copy(update={"event_id": event_id})
+        await self._publisher.publish_failed(failed)
 
     async def _publish_enriched(
         self,
@@ -182,14 +176,14 @@ class EnrichmentOrchestrator:
     ) -> None:
         if self._publisher is None:
             raise EnrichmentError("Event publisher is not configured", stage="publish")
-        await self._publisher.publish_enriched(
-            ListingEnrichedEvent(
-                event_id=event_id or str(uuid.uuid4()),
-                listing=listing,
-                request_id=request_id,
-                retry_count=retry_count,
-            )
+        enriched = ListingEnrichedEvent(
+            listing=listing,
+            request_id=request_id,
+            retry_count=retry_count,
         )
+        if event_id is not None:
+            enriched = enriched.model_copy(update={"event_id": event_id})
+        await self._publisher.publish_enriched(enriched)
 
     async def get_state(self, external_id: str) -> EnrichedListing:
         return await self._repository.get(external_id)
