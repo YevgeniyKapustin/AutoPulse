@@ -1,4 +1,4 @@
-.PHONY: help up down logs build test lint format install config-prod up-prod migrate
+.PHONY: help up down logs build test test-int lint format install config-prod up-prod migrate
 
 POETRY ?= poetry
 
@@ -12,7 +12,8 @@ help:
 	@echo "  make migrate     - alembic upgrade head (pricer MySQL)"
 	@echo "  make config-prod - validate compose.yaml + compose.prod.yaml"
 	@echo "  make up-prod     - prod overlay (requires TAG=...)"
-	@echo "  make test        - pytest (shared + services)"
+	@echo "  make test        - unit tests (skip integration)"
+	@echo "  make test-int    - integration tests (Docker required)"
 	@echo "  make lint        - ruff check + mypy"
 	@echo "  make format      - ruff format (line length 88)"
 
@@ -42,7 +43,10 @@ up-prod:
 	docker compose -f compose.yaml -f compose.prod.yaml up -d
 
 test:
-	$(POETRY) run pytest shared/tests services/enrichment/tests services/pricer/tests -q
+	$(POETRY) run pytest -m "not integration" -q
+
+test-int:
+	$(POETRY) run pytest -m integration -q
 
 lint:
 	$(POETRY) run ruff check shared services

@@ -50,4 +50,8 @@ testpaths = [
   "shared/tests",
   "services/enrichment/tests",
   "services/pricer/tests",
+  "tests",
+]
+markers = [
+  "integration: requires Docker and testcontainers",
 ]

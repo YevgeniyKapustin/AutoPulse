@@ -46,12 +46,34 @@ jobs:
         run: poetry run mypy
         continue-on-error: true
 
-      - name: Pytest
+      - name: Pytest unit
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: >
-          poetry run pytest shared/tests services/enrichment/tests
-          services/pricer/tests -q
+          poetry run pytest -m "not integration" -q
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+          virtualenvs-in-project: true
+
+      - name: Install monorepo
+        run: python scripts/poetry_install.py
+
+      - name: Pytest integration
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: poetry run pytest -m integration -q
 
   compose-config:
     runs-on: ubuntu-latest
