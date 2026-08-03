@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Request
+"""HTTP pricing endpoints."""
+
+from fastapi import APIRouter, HTTPException, Request, status
 
 from autopulse_shared.schemas.listing import EnrichedListing
 from autopulse_shared.schemas.pricing import PricingResult
+from services.pricer.app.core.exceptions import PricingNotFoundError
 from services.pricer.app.services.pricing_service import PricingService
 
 router = APIRouter(prefix="/pricing", tags=["pricing"])
@@ -19,4 +22,10 @@ async def estimate_price(
 @router.get("/{external_id}", response_model=PricingResult)
 async def get_pricing(external_id: str, request: Request) -> PricingResult:
     pricing: PricingService = request.app.state.pricing
-    return await pricing.get_result(external_id)
+    try:
+        return await pricing.get_result(external_id)
+    except PricingNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc

@@ -17,12 +17,17 @@ class Settings(BaseSettings):
     rabbitmq_vhost: str = "/"
     rabbitmq_exchange: str = "autopulse.cars"
     routing_key_enriched_success: str = "car.enriched.success"
+    routing_key_pricer_dlq: str = "car.pricer.dlq"
+    pricer_queue_name: str = "pricer.enriched"
+    pricer_dlq_name: str = "pricer.dlq"
+    pricer_max_retries: int = 5
 
     mysql_host: str = "localhost"
     mysql_port: int = 3306
     mysql_user: str = "autopulse"
     mysql_password: str = "autopulse"
     mysql_database: str = "autopulse_pricing"
+    auto_create_tables: bool = False
 
     default_target_margin_pct: float = 12.0
     default_turnover_days: int = 21
@@ -39,6 +44,13 @@ class Settings(BaseSettings):
     def mysql_dsn(self) -> str:
         return (
             f"mysql+aiomysql://{self.mysql_user}:{self.mysql_password}"
+            f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}"
+        )
+
+    @property
+    def mysql_sync_dsn(self) -> str:
+        return (
+            f"mysql+pymysql://{self.mysql_user}:{self.mysql_password}"
             f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}"
         )
 

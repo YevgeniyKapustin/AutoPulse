@@ -1,27 +1,33 @@
-"""Rule-based margin / turnover pricing engine."""
+"""Coordinates margin rules and pricing persistence."""
 
 from __future__ import annotations
 
 import logging
+from typing import Protocol
 
 from autopulse_shared.schemas.listing import EnrichedListing
 from autopulse_shared.schemas.pricing import PricingResult
 from services.pricer.app.core.config import Settings
-from services.pricer.app.repositories.pricing_repository import PricingRepository
 from services.pricer.app.services.margin_rules import MarginRuleEngine
 
 logger = logging.getLogger(__name__)
+
+
+class PricingStore(Protocol):
+    async def save(self, result: PricingResult) -> None: ...
+
+    async def get(self, external_id: str) -> PricingResult: ...
 
 
 class PricingService:
     def __init__(
         self,
         settings: Settings,
-        repository: PricingRepository | None = None,
+        repository: PricingStore,
         rules: MarginRuleEngine | None = None,
     ) -> None:
         self._settings = settings
-        self._repository = repository or PricingRepository()
+        self._repository = repository
         self._rules = rules or MarginRuleEngine(settings)
 
     async def price(self, listing: EnrichedListing) -> PricingResult:

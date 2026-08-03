@@ -13,6 +13,12 @@ from services.pricer.app.consumers.enriched_listing_consumer import (
 from services.pricer.app.core.config import get_settings
 from services.pricer.app.core.logging import setup_logging
 from services.pricer.app.core.middleware import RequestIdMiddleware
+from services.pricer.app.db.session import (
+    create_engine,
+    create_schema,
+    create_session_factory,
+)
+from services.pricer.app.repositories.pricing_repository import PricingRepository
 from services.pricer.app.services.pricing_service import PricingService
 
 
@@ -20,15 +26,24 @@ from services.pricer.app.services.pricing_service import PricingService
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     setup_logging(settings.log_level)
-    pricing = PricingService(settings)
+
+    engine = create_engine(settings)
+    if settings.auto_create_tables:
+        await create_schema(engine)
+    session_factory = create_session_factory(engine)
+    repository = PricingRepository(session_factory)
+    pricing = PricingService(settings, repository)
     consumer = EnrichedListingConsumer(settings, pricing)
     await consumer.start()
+
     app.state.pricing = pricing
     app.state.consumer = consumer
+    app.state.engine = engine
     try:
         yield
     finally:
         await consumer.stop()
+        await engine.dispose()
 
 
 def create_app() -> FastAPI:
