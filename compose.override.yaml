@@ -1,0 +1,66 @@
+# Local/dev overrides — merged automatically with compose.yaml.
+# Publishes infra ports, builds from Dockerfiles, bind-mounts for reload.
+
+services:
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  mongodb:
+    ports:
+      - "27017:27017"
+
+  mysql:
+    ports:
+      - "3306:3306"
+
+  enrichment:
+    build:
+      context: .
+      dockerfile: services/enrichment/Dockerfile
+      target: runtime
+    image: autopulse-enrichment:local
+    ports:
+      - "8001:8001"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./services/enrichment:/app/services/enrichment
+      - ./shared:/app/shared
+    command:
+      [
+        "uvicorn",
+        "services.enrichment.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+        "--reload",
+      ]
+
+  pricer:
+    build:
+      context: .
+      dockerfile: services/pricer/Dockerfile
+      target: runtime
+    image: autopulse-pricer:local
+    ports:
+      - "8002:8002"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./services/pricer:/app/services/pricer
+      - ./shared:/app/shared
+    command:
+      [
+        "uvicorn",
+        "services.pricer.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8002",
+        "--reload",
+      ]

@@ -1,0 +1,48 @@
+# Production overlay — never use compose.override.yaml on the server.
+#
+#   export TAG=$(git rev-parse --short HEAD)
+#   docker compose -f compose.yaml -f compose.prod.yaml pull
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d
+#
+# Apps pull immutable images from the registry. Datastores stay on the
+# internal backend network (no host ports).
+
+services:
+  rabbitmq:
+    logging: &json-log
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  mongodb:
+    logging: *json-log
+
+  mysql:
+    logging: *json-log
+
+  enrichment:
+    image: ghcr.io/yevgeniykapustin/autopulse-enrichment:${TAG:?set TAG to git sha or semver}
+    pull_policy: always
+    env_file:
+      - path: ${ENRICHMENT_ENV_FILE:-.env.prod.example}
+        required: false
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging: *json-log
+
+  pricer:
+    image: ghcr.io/yevgeniykapustin/autopulse-pricer:${TAG:?set TAG to git sha or semver}
+    pull_policy: always
+    env_file:
+      - path: ${PRICER_ENV_FILE:-.env.prod.example}
+        required: false
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging: *json-log

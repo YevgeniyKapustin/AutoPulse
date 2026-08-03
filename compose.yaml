@@ -1,0 +1,126 @@
+# Base stack — shared by local override and compose.prod.yaml.
+# Local:  docker compose up -d --build
+# Prod:   docker compose -f compose.yaml -f compose.prod.yaml up -d
+
+name: autopulse
+
+x-app-env: &app-env
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: 5672
+  RABBITMQ_USER: ${RABBITMQ_USER:-autopulse}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-autopulse}
+  RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+  RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-autopulse.cars}
+  MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017}
+  MONGODB_DB: ${MONGODB_DB:-autopulse}
+  MYSQL_HOST: mysql
+  MYSQL_PORT: 3306
+  MYSQL_USER: ${MYSQL_USER:-autopulse}
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD:-autopulse}
+  MYSQL_DATABASE: ${MYSQL_DATABASE:-autopulse_pricing}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13.6-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-autopulse}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-autopulse}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  mongodb:
+    image: mongo:7.0.16
+    restart: unless-stopped
+    volumes:
+      - mongodb_data:/data/db
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  mysql:
+    image: mysql:8.4.3
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-autopulse}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-autopulse_pricing}
+      MYSQL_USER: ${MYSQL_USER:-autopulse}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-autopulse}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks: [backend]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "127.0.0.1",
+          "-u${MYSQL_USER:-autopulse}",
+          "-p${MYSQL_PASSWORD:-autopulse}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  enrichment:
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 25s
+
+  pricer:
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      DEFAULT_TARGET_MARGIN_PCT: ${DEFAULT_TARGET_MARGIN_PCT:-12.0}
+      DEFAULT_TURNOVER_DAYS: ${DEFAULT_TURNOVER_DAYS:-21}
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8002/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 25s
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  rabbitmq_data:
+  mongodb_data:
+  mysql_data:
