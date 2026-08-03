@@ -27,10 +27,7 @@ RUN poetry install --only main --no-root --no-ansi
 
 FROM ${PYTHON_IMAGE} AS runtime
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system --gid 10001 appuser \
+RUN groupadd --system --gid 10001 appuser \
     && useradd --system --uid 10001 --gid appuser --home /app \
         --shell /usr/sbin/nologin appuser
 
@@ -50,6 +47,6 @@ USER appuser
 EXPOSE 8002
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:8002/health" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')"
 
 CMD ["uvicorn", "services.pricer.app.main:app", "--host", "0.0.0.0", "--port", "8002"]
