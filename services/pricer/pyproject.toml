@@ -17,6 +17,7 @@ aiomysql = "^0.2"
 pymysql = "^1.1"
 alembic = "^1.13"
 pydantic-settings = "^2.3"
+scikit-learn = "^1.5"
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

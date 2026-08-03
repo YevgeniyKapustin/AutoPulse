@@ -30,5 +30,5 @@ make migrate
 
 ## Next TODOs
 
-Optional sklearn regressor behind the same `PricingService` interface.
-Docker smoke (Brief D) still open.
+Optional: set `PRICING_ENGINE=sklearn` for the Ridge model. Stretch items
+(UI, metrics, crawlers) live in `docs/roadmap.md`.

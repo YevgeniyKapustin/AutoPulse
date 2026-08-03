@@ -31,6 +31,7 @@ class Settings(BaseSettings):
 
     default_target_margin_pct: float = 12.0
     default_turnover_days: int = 21
+    pricing_engine: str = "rules"
 
     @property
     def rabbitmq_url(self) -> str:

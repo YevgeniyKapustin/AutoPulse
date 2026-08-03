@@ -105,6 +105,7 @@ services:
       DEFAULT_TURNOVER_DAYS: ${DEFAULT_TURNOVER_DAYS:-21}
       AUTO_CREATE_TABLES: ${AUTO_CREATE_TABLES:-false}
       PRICER_MAX_RETRIES: ${PRICER_MAX_RETRIES:-5}
+      PRICING_ENGINE: ${PRICING_ENGINE:-rules}
     networks: [backend]
     depends_on:
       rabbitmq:
