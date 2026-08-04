@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 import sys
 from collections.abc import Callable
-from typing import Any
+from typing import Literal
 
 import structlog
+from structlog.stdlib import BoundLogger
 from structlog.types import EventDict, Processor
+
+LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
 def _add_service_fields(
@@ -40,7 +43,7 @@ def _normalize_trace_id(
 
 def setup_logging(
     *,
-    level: str = "INFO",
+    level: LogLevel | str = "INFO",
     service: str,
     environment: str = "local",
 ) -> None:
@@ -80,13 +83,13 @@ def setup_logging(
     root = logging.getLogger()
     root.handlers.clear()
     root.addHandler(handler)
-    root.setLevel(getattr(logging, level.upper(), logging.INFO))
+    root.setLevel(getattr(logging, str(level).upper(), logging.INFO))
 
     # Keep uvicorn access noise under control; still JSON-formatted.
     logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
 
-def get_logger(name: str | None = None) -> Any:
+def get_logger(name: str | None = None) -> BoundLogger:
     """Return a bound structlog logger (stdlib-backed)."""
     return structlog.get_logger(name)
 

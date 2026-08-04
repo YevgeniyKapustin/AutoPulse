@@ -1,5 +1,6 @@
 """Shared contracts for AutoPulse microservices."""
 
+from autopulse_shared.schemas.errors import ErrorResponse
 from autopulse_shared.schemas.events import (
     SCHEMA_VERSION,
     EnrichmentFailedEvent,
@@ -21,6 +22,7 @@ __all__ = [
     "DefectInfo",
     "EnrichedListing",
     "EnrichmentFailedEvent",
+    "ErrorResponse",
     "EventType",
     "ListingEnrichedEvent",
     "ListingOptions",
