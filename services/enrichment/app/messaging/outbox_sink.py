@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Protocol
 
 from autopulse_shared.schemas.events import (
     BaseEvent,
@@ -14,19 +14,27 @@ from autopulse_shared.schemas.events import (
 from services.enrichment.app.messaging.event_message import serialize_event
 from services.enrichment.app.messaging.publisher import EventPublisher
 from services.enrichment.app.messaging.routes import PublishRoutes
-from services.enrichment.app.repositories.messaging_store import OutboxRepository
+from services.enrichment.app.repositories.messaging_store import (
+    OutboxPendingDoc,
+    OutboxRepository,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class OutboxStore(Protocol):
     async def enqueue(
-        self, routing_key: str, body: bytes, headers: dict[str, object]
+        self,
+        routing_key: str,
+        body: bytes,
+        headers: dict[str, str],
     ) -> str: ...
 
-    async def list_pending(self, limit: int = 50) -> list[dict[str, Any]]: ...
+    async def claim_pending(self, limit: int = 50) -> list[OutboxPendingDoc]: ...
 
     async def mark_published(self, outbox_id: str) -> None: ...
+
+    async def release_claim(self, outbox_id: str) -> None: ...
 
 
 class OutboxEventSink:
@@ -50,27 +58,33 @@ class OutboxEventSink:
         await self._enqueue_and_drain(event, self._routes.enrichment_failed)
 
     async def drain(self, limit: int = 50) -> int:
-        pending = await self._outbox.list_pending(limit=limit)
+        """Claim pending outbox rows and publish them (multi-replica safe)."""
+        pending = await self._outbox.claim_pending(limit=limit)
         published = 0
         for doc in pending:
-            body = doc["body"]
-            if isinstance(body, str):
-                body = body.encode("utf-8")
-            elif not isinstance(body, (bytes, bytearray)):
-                body = bytes(body)
-            raw_headers = doc.get("headers") or {}
-            headers = {
-                str(key): str(value)
-                for key, value in dict(raw_headers).items()
-                if value is not None
-            }
-            await self._publisher.publish_raw_body(
-                body,
-                str(doc["routing_key"]),
-                headers=headers,
-            )
-            await self._outbox.mark_published(str(doc["_id"]))
-            published += 1
+            outbox_id = str(doc["_id"])
+            try:
+                body = doc["body"]
+                if isinstance(body, str):
+                    body = body.encode("utf-8")
+                elif not isinstance(body, (bytes, bytearray)):
+                    body = bytes(body)
+                raw_headers = doc.get("headers") or {}
+                headers = {
+                    str(key): str(value)
+                    for key, value in dict(raw_headers).items()
+                    if value is not None
+                }
+                await self._publisher.publish_raw_body(
+                    body,
+                    str(doc["routing_key"]),
+                    headers=headers,
+                )
+                await self._outbox.mark_published(outbox_id)
+                published += 1
+            except Exception:
+                await self._outbox.release_claim(outbox_id)
+                raise
         if published:
             logger.info("Drained enrichment outbox count=%s", published)
         return published

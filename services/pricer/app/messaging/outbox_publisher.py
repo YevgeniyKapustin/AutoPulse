@@ -43,9 +43,16 @@ class OutboxPublisher:
         ]
         published = 0
         for outbox_id, routing_key, body, headers in snapshots:
-            if not isinstance(headers, dict):
-                headers = {}
-            await self._publish_message(body, routing_key, headers)
+            parsed: dict[str, str]
+            if isinstance(headers, dict):
+                parsed = {
+                    str(key): str(value)
+                    for key, value in headers.items()
+                    if value is not None
+                }
+            else:
+                parsed = {}
+            await self._publish_message(body, routing_key, parsed)
             await self._repository.mark_outbox_published(outbox_id)
             published += 1
         if published:
@@ -56,7 +63,7 @@ class OutboxPublisher:
         self,
         body: bytes,
         routing_key: str,
-        headers: dict[str, Any],
+        headers: dict[str, str],
     ) -> None:
         message = aio_pika.Message(
             body=body,
