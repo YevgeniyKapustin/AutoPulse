@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from collections import defaultdict
 from threading import Lock
+from typing import Protocol
+
+
+class MetricsRecorder(Protocol):
+    def inc(self, name: str, amount: float = 1.0, **labels: str) -> None: ...
 
 
 class MetricsRegistry:
@@ -31,9 +36,7 @@ class MetricsRegistry:
                 lines.append(f"# TYPE {name} counter")
                 declared.add(name)
             if labels:
-                label_str = ",".join(
-                    f'{k}="{_escape_label(v)}"' for k, v in labels
-                )
+                label_str = ",".join(f'{k}="{_escape_label(v)}"' for k, v in labels)
                 lines.append(f"{name}{{{label_str}}} {value}")
             else:
                 lines.append(f"{name} {value}")

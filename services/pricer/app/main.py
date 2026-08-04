@@ -56,9 +56,9 @@ class PricerApp:
 
     @asynccontextmanager
     async def lifespan(self, app: FastAPI) -> AsyncIterator[None]:
-        """Boot metrics, runtime, and messaging; drain in reverse on shutdown."""
-        await self._startup(app)
+        """Boot metrics/runtime; always drain on exit."""
         try:
+            await self._startup(app)
             yield
         finally:
             await self._shutdown()
@@ -77,8 +77,6 @@ class PricerApp:
         app.state.runtime = self._runtime
 
     async def _shutdown(self) -> None:
-        if self._runtime is None:
-            return
         await drain_runtime_then_stop_metrics(
             self._runtime,
             self._metrics,

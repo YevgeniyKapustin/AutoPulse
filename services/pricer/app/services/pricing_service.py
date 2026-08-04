@@ -3,47 +3,41 @@
 from __future__ import annotations
 
 import logging
-from typing import Protocol
 
 from autopulse_shared.schemas.listing import EnrichedListing
 from autopulse_shared.schemas.pricing import PricingResult
-from services.pricer.app.core.config import Settings
-from services.pricer.app.services.engine_factory import build_pricing_engine
+from services.pricer.app.services.ports import PricingStore
 from services.pricer.app.services.pricing_engine import PricingEngine
 
 logger = logging.getLogger(__name__)
 
 
-class PricingStore(Protocol):
-    async def save(
-        self,
-        result: PricingResult,
-        *,
-        event_id: str | None = None,
-    ) -> None: ...
-
-    async def get(self, external_id: str) -> PricingResult: ...
-
-
 class PricingService:
     def __init__(
         self,
-        settings: Settings,
         repository: PricingStore,
-        engine: PricingEngine | None = None,
+        engine: PricingEngine,
     ) -> None:
-        self._settings = settings
         self._repository = repository
-        self._engine = engine or build_pricing_engine(settings)
+        self._engine = engine
+
+    def evaluate(self, listing: EnrichedListing) -> PricingResult:
+        """Pure evaluation — no persistence or outbox side effects."""
+        return self._engine.evaluate(listing)
 
     async def price(
         self,
         listing: EnrichedListing,
         *,
         event_id: str | None = None,
+        request_id: str | None = None,
     ) -> PricingResult:
-        result = self._engine.evaluate(listing)
-        await self._repository.save(result, event_id=event_id)
+        result = self.evaluate(listing)
+        await self._repository.save(
+            result,
+            event_id=event_id,
+            request_id=request_id,
+        )
         logger.info(
             "Priced %s bid=%.2f turnover=%s engine=%s",
             result.external_id,

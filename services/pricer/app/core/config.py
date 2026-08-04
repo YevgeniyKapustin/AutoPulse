@@ -37,11 +37,14 @@ class Settings(BaseSettings):
     routing_key_enriched_success: str = "car.enriched.success"
     routing_key_priced_success: str = "car.priced.success"
     routing_key_pricer_dlq: str = "car.pricer.dlq"
+    routing_key_pricer_retry: str = "car.pricer.retry"
     pricer_queue_name: str = "pricer.enriched"
     pricer_dlq_name: str = "pricer.dlq"
+    pricer_retry_queue_name: str = "pricer.retry"
     pricer_max_retries: int = 5
     pricer_retry_base_delay_sec: float = 1.0
     pricer_retry_max_delay_sec: float = 30.0
+    outbox_drain_interval_sec: float = 5.0
     shutdown_timeout_sec: float = 10.0
 
     mysql_host: str = "localhost"

@@ -1,10 +1,10 @@
 import pytest
-
-from autopulse_shared.schemas.listing import EnrichedListing, ListingSource
 from services.pricer.app.core.config import Settings
 from services.pricer.app.repositories.memory import InMemoryPricingRepository
 from services.pricer.app.services.engine_factory import build_pricing_engine
 from services.pricer.app.services.pricing_service import PricingService
+
+from autopulse_shared.schemas.listing import EnrichedListing, ListingSource
 
 
 def test_factory_defaults_to_rules() -> None:
@@ -39,7 +39,10 @@ def test_sklearn_engine_returns_positive_bid() -> None:
 @pytest.mark.asyncio
 async def test_pricing_service_with_sklearn_engine() -> None:
     settings = Settings(pricing_engine="sklearn")
-    service = PricingService(settings, InMemoryPricingRepository())
+    service = PricingService(
+        InMemoryPricingRepository(),
+        build_pricing_engine(settings),
+    )
     listing = EnrichedListing(
         external_id="s2",
         source=ListingSource.MANUAL,

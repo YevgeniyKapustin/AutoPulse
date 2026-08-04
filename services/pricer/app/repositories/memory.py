@@ -4,23 +4,79 @@ from __future__ import annotations
 
 from autopulse_shared.schemas.pricing import PricingResult
 from services.pricer.app.core.exceptions import PricingNotFoundError
+from services.pricer.app.services.ports import OutboxPending
 
 
 class InMemoryPricingRepository:
     def __init__(self) -> None:
         self._items: dict[str, PricingResult] = {}
-        self._claimed: set[str] = set()
+        self._inbox: dict[str, str] = {}
+        self._outbox: dict[int, OutboxPending] = {}
+        self._processing: set[int] = set()
+        self._published: set[int] = set()
+        self._next_outbox_id = 1
         self.outbox: list[tuple[str, str]] = []
 
-    async def try_claim_event(self, event_id: str) -> bool:
-        if event_id in self._claimed:
+    async def try_claim(
+        self,
+        event_id: str,
+        *,
+        reclaim_processing: bool = False,
+    ) -> bool:
+        status = self._inbox.get(event_id)
+        if status is None:
+            self._inbox[event_id] = "processing"
+            return True
+        if status == "completed":
             return False
-        self._claimed.add(event_id)
-        return True
+        return status == "processing" and reclaim_processing
 
-    async def save(self, result: PricingResult, *, event_id: str | None = None) -> None:
+    async def mark_completed(self, event_id: str) -> None:
+        self._inbox[event_id] = "completed"
+
+    async def release_claim(self, event_id: str) -> None:
+        if self._inbox.get(event_id) == "processing":
+            del self._inbox[event_id]
+
+    async def save(
+        self,
+        result: PricingResult,
+        *,
+        event_id: str | None = None,
+        request_id: str | None = None,
+    ) -> None:
         self._items[result.external_id] = result.model_copy(deep=True)
-        self.outbox.append((event_id or result.external_id, result.external_id))
+        eid = event_id or result.external_id
+        self.outbox.append((eid, result.external_id))
+        outbox_id = self._next_outbox_id
+        self._next_outbox_id += 1
+        self._outbox[outbox_id] = {
+            "id": outbox_id,
+            "routing_key": "car.priced.success",
+            "payload": b"{}",
+            "headers": {
+                "event_id": eid,
+                "x-request-id": request_id or "",
+            },
+        }
+
+    async def claim_pending(self, limit: int = 50) -> list[OutboxPending]:
+        claimed: list[OutboxPending] = []
+        for outbox_id, doc in sorted(self._outbox.items()):
+            if outbox_id in self._published or outbox_id in self._processing:
+                continue
+            if len(claimed) >= limit:
+                break
+            self._processing.add(outbox_id)
+            claimed.append(doc)
+        return claimed
+
+    async def mark_published(self, outbox_id: int) -> None:
+        self._processing.discard(outbox_id)
+        self._published.add(outbox_id)
+
+    async def release_outbox_claim(self, outbox_id: int) -> None:
+        self._processing.discard(outbox_id)
 
     async def get(self, external_id: str) -> PricingResult:
         if external_id not in self._items:

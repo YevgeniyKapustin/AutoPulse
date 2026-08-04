@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, cast
 
@@ -11,8 +10,8 @@ from aio_pika.abc import AbstractExchange
 from aio_pika.exceptions import DeliveryError
 from pamqp.commands import Basic
 
-from services.pricer.app.core.metrics import METRICS
-from services.pricer.app.repositories.pricing_repository import PricingRepository
+from services.pricer.app.core.metrics import METRICS, MetricsRecorder
+from services.pricer.app.services.ports import OutboxStore
 
 logger = logging.getLogger(__name__)
 
@@ -25,36 +24,33 @@ class OutboxPublisher:
     def __init__(
         self,
         exchange: AbstractExchange,
-        repository: PricingRepository,
+        repository: OutboxStore,
+        metrics: MetricsRecorder = METRICS,
     ) -> None:
         self._exchange = exchange
         self._repository = repository
+        self._metrics = metrics
 
     async def drain(self, limit: int = 50) -> int:
-        pending = await self._repository.list_pending_outbox(limit=limit)
-        snapshots = [
-            (
-                row.id,
-                row.routing_key,
-                row.payload.encode("utf-8"),
-                json.loads(row.headers_json or "{}"),
-            )
-            for row in pending
-        ]
+        """Claim and publish pending outbox rows; continue on failures."""
+        pending = await self._repository.claim_pending(limit=limit)
         published = 0
-        for outbox_id, routing_key, body, headers in snapshots:
-            parsed: dict[str, str]
-            if isinstance(headers, dict):
-                parsed = {
-                    str(key): str(value)
-                    for key, value in headers.items()
-                    if value is not None
-                }
-            else:
-                parsed = {}
-            await self._publish_message(body, routing_key, parsed)
-            await self._repository.mark_outbox_published(outbox_id)
-            published += 1
+        for item in pending:
+            outbox_id = item["id"]
+            try:
+                await self._publish_message(
+                    item["payload"],
+                    item["routing_key"],
+                    item["headers"],
+                )
+                await self._repository.mark_published(outbox_id)
+                published += 1
+            except Exception:
+                logger.exception(
+                    "Outbox publish failed outbox_id=%s; releasing claim",
+                    outbox_id,
+                )
+                await self._repository.release_outbox_claim(outbox_id)
         if published:
             logger.info("Drained pricer outbox count=%s", published)
         return published
@@ -77,15 +73,18 @@ class OutboxPublisher:
                 routing_key=routing_key,
                 mandatory=True,
             )
-            if isinstance(confirmation, (Basic.Nack, Basic.Reject)):
-                METRICS.inc("autopulse_publish_nack_total", routing_key=routing_key)
+            if isinstance(confirmation, Basic.Nack | Basic.Reject):
+                self._metrics.inc(
+                    "autopulse_publish_nack_total",
+                    routing_key=routing_key,
+                )
                 raise PublishError(f"Outbox publish NACKed key={routing_key}")
         except DeliveryError as err:
-            METRICS.inc(
+            self._metrics.inc(
                 "autopulse_publish_unroutable_total",
                 routing_key=routing_key,
             )
             raise PublishError(
                 f"Unroutable outbox message for key={routing_key}"
             ) from err
-        METRICS.inc("autopulse_publish_ok_total", routing_key=routing_key)
+        self._metrics.inc("autopulse_publish_ok_total", routing_key=routing_key)

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request, status
 from autopulse_shared.schemas.errors import ErrorResponse
 from autopulse_shared.schemas.listing import EnrichedListing
 from autopulse_shared.schemas.pricing import PricingResult
-from services.pricer.app.services.pricing_service import PricingService
+from services.pricer.app.services.ports import PricingCommand
 
 router = APIRouter(prefix="/pricing", tags=["pricing"])
 
@@ -17,9 +17,20 @@ async def estimate_price(
     listing: EnrichedListing,
     request: Request,
 ) -> PricingResult:
-    """Compute a price for an enriched listing without requiring a prior row."""
-    pricing: PricingService = request.app.state.pricing
-    return await pricing.price(listing)
+    """Compute a dry-run price (no MySQL write / outbox)."""
+    pricing: PricingCommand = request.app.state.pricing
+    return pricing.evaluate(listing)
+
+
+@router.post("", response_model=PricingResult)
+async def price_listing(
+    listing: EnrichedListing,
+    request: Request,
+) -> PricingResult:
+    """Persist a price snapshot and enqueue ``car.priced.success``."""
+    pricing: PricingCommand = request.app.state.pricing
+    request_id: str | None = getattr(request.state, "request_id", None)
+    return await pricing.price(listing, request_id=request_id)
 
 
 @router.get(
@@ -33,6 +44,6 @@ async def estimate_price(
     },
 )
 async def get_pricing(external_id: str, request: Request) -> PricingResult:
-    """Return a stored pricing result; 404 via domain exception handler."""
-    pricing: PricingService = request.app.state.pricing
+    """Return stored pricing; 404 via domain exception handler."""
+    pricing: PricingCommand = request.app.state.pricing
     return await pricing.get_result(external_id)

@@ -3,13 +3,14 @@
 import pytest
 from services.enrichment.app.core.circuit_breaker import CircuitBreaker
 from services.enrichment.app.core.config import Settings as EnrichmentSettings
-from services.enrichment.app.repositories.memory import InMemoryListingRepository
 from services.enrichment.app.enrichment.orchestrator import (
     EnrichmentOrchestrator,
 )
 from services.enrichment.app.llm import LlmService
+from services.enrichment.app.repositories.memory import InMemoryListingRepository
 from services.pricer.app.core.config import Settings as PricerSettings
 from services.pricer.app.repositories.memory import InMemoryPricingRepository
+from services.pricer.app.services.engine_factory import build_pricing_engine
 from services.pricer.app.services.pricing_service import PricingService
 
 from autopulse_shared.schemas.listing import RawListing
@@ -60,8 +61,8 @@ async def test_raw_to_enriched_to_priced() -> None:
     assert len(publisher.enriched) == 1
 
     pricer = PricingService(
-        PricerSettings(default_target_margin_pct=12.0),
         InMemoryPricingRepository(),
+        build_pricing_engine(PricerSettings(default_target_margin_pct=12.0)),
     )
     priced = await pricer.price(enriched)
     assert priced.external_id == "e2e-1"

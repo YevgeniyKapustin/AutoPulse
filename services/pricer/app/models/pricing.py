@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Float, Integer, String, Text
+from sqlalchemy import DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -30,20 +30,27 @@ class PricingResultRow(Base):
 
 
 class ProcessedEventRow(Base):
-    """Consumer inbox — claim event_id exactly once."""
+    """Consumer inbox with lease-style processing claims."""
 
     __tablename__ = "processed_events"
+    __table_args__ = (
+        Index("ix_processed_events_status_claimed", "status", "claimed_at"),
+    )
 
     event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    processed_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
-    )
+    status: Mapped[str] = mapped_column(String(16), default="processing")
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class OutboxMessageRow(Base):
     """Transactional outbox for post-commit RabbitMQ publishes."""
 
     __tablename__ = "outbox_messages"
+    __table_args__ = (
+        Index("ix_outbox_messages_published_at", "published_at"),
+        Index("ix_outbox_messages_status_created", "status", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     routing_key: Mapped[str] = mapped_column(String(128))
@@ -53,3 +60,5 @@ class OutboxMessageRow(Base):
         DateTime, default=lambda: datetime.now(UTC)
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -17,6 +17,7 @@ from services.enrichment.app.enrichment.orchestrator import (
 from services.enrichment.app.llm import LlmService
 from services.pricer.app.core.config import Settings as PricerSettings
 from services.pricer.app.repositories.memory import InMemoryPricingRepository
+from services.pricer.app.services.engine_factory import build_pricing_engine
 from services.pricer.app.services.pricing_service import PricingService
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,8 +61,8 @@ async def test_brief_d_fixture_enrich_then_price() -> None:
     assert "M-Sport" in enriched.options.packages
 
     priced = await PricingService(
-        PricerSettings(),
         InMemoryPricingRepository(),
+        build_pricing_engine(PricerSettings()),
     ).price(enriched)
     assert priced.external_id == raw.external_id
     assert priced.recommended_dealer_bid > 0

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from autopulse_shared.metrics_http import MetricsHttpServer
 from services.pricer.app.bootstrap.container import (
@@ -12,6 +13,8 @@ from services.pricer.app.bootstrap.container import (
 )
 from services.pricer.app.core.config import RunMode, Settings
 from services.pricer.app.core.metrics import METRICS
+
+logger = logging.getLogger(__name__)
 
 
 def assert_uvicorn_run_mode(settings: Settings) -> None:
@@ -47,19 +50,27 @@ async def attach_messaging_for_mode(
 
 
 async def drain_runtime_then_stop_metrics(
-    runtime: PricerRuntime,
+    runtime: PricerRuntime | None,
     metrics: MetricsHttpServer | None,
     timeout_sec: float,
 ) -> bool:
     """Stop Rabbit/MySQL first; keep /metrics until that finishes.
 
-    Returns False if runtime drain timed out.
+    Always stops metrics in ``finally`` so partial startups cannot
+    orphan the scrape port.
     """
     drained: bool = True
     try:
-        await asyncio.wait_for(shutdown_runtime(runtime), timeout=timeout_sec)
-    except TimeoutError:
-        drained = False
-    if metrics is not None:
-        await metrics.stop()
+        if runtime is not None:
+            try:
+                await asyncio.wait_for(
+                    shutdown_runtime(runtime),
+                    timeout=timeout_sec,
+                )
+            except TimeoutError:
+                drained = False
+                logger.warning("Runtime shutdown timed out after %ss", timeout_sec)
+    finally:
+        if metrics is not None:
+            await metrics.stop()
     return drained

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
-from typing import TypedDict
+from datetime import UTC, datetime, timedelta
+from typing import Final, TypedDict
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -19,6 +19,9 @@ from services.pricer.app.models.pricing import (
     PricingResultRow,
     ProcessedEventRow,
 )
+from services.pricer.app.services.ports import OutboxPending
+
+_CLAIM_STALE_AFTER: Final[timedelta] = timedelta(minutes=5)
 
 
 class PricingRowValues(TypedDict):
@@ -35,32 +38,87 @@ class PricingRowValues(TypedDict):
     priced_at: datetime
 
 
-
 class PricingRepository:
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        settings: Settings | None = None,
+        settings: Settings,
     ) -> None:
         self._session_factory = session_factory
-        self._settings = settings or Settings()
+        self._settings = settings
 
-    async def try_claim_event(self, event_id: str) -> bool:
+    async def try_claim(
+        self,
+        event_id: str,
+        *,
+        reclaim_processing: bool = False,
+    ) -> bool:
+        """Acquire processing claim; false if completed/leased."""
+        now = datetime.now(UTC).replace(tzinfo=None)
         async with self._session_factory() as session:
             session.add(
                 ProcessedEventRow(
                     event_id=event_id,
-                    processed_at=datetime.now(UTC).replace(tzinfo=None),
+                    status="processing",
+                    claimed_at=now,
+                    completed_at=None,
                 )
             )
             try:
                 await session.commit()
+                return True
             except IntegrityError:
                 await session.rollback()
-                return False
-            return True
 
-    async def save(self, result: PricingResult, *, event_id: str | None = None) -> None:
+            stale_before = now - _CLAIM_STALE_AFTER
+            if reclaim_processing:
+                clause = ProcessedEventRow.status == "processing"
+            else:
+                clause = (ProcessedEventRow.status == "processing") & (
+                    ProcessedEventRow.claimed_at < stale_before
+                )
+            result = await session.execute(
+                update(ProcessedEventRow)
+                .where(ProcessedEventRow.event_id == event_id)
+                .where(clause)
+                .values(status="processing", claimed_at=now, completed_at=None)
+            )
+            await session.commit()
+            return int(getattr(result, "rowcount", 0) or 0) > 0
+
+    async def mark_completed(self, event_id: str) -> None:
+        now = datetime.now(UTC).replace(tzinfo=None)
+        async with self._session_factory() as session:
+            row = await session.get(ProcessedEventRow, event_id)
+            if row is None:
+                session.add(
+                    ProcessedEventRow(
+                        event_id=event_id,
+                        status="completed",
+                        claimed_at=None,
+                        completed_at=now,
+                    )
+                )
+            else:
+                row.status = "completed"
+                row.claimed_at = None
+                row.completed_at = now
+            await session.commit()
+
+    async def release_claim(self, event_id: str) -> None:
+        async with self._session_factory() as session:
+            row = await session.get(ProcessedEventRow, event_id)
+            if row is not None and row.status == "processing":
+                await session.delete(row)
+                await session.commit()
+
+    async def save(
+        self,
+        result: PricingResult,
+        *,
+        event_id: str | None = None,
+        request_id: str | None = None,
+    ) -> None:
         async with self._session_factory() as session:
             row = await session.scalar(
                 select(PricingResultRow).where(
@@ -77,6 +135,7 @@ class PricingRepository:
             completed = PricingCompletedEvent(
                 event_id=event_id or result.external_id,
                 result=result,
+                request_id=request_id,
             )
             session.add(
                 OutboxMessageRow(
@@ -87,31 +146,81 @@ class PricingRepository:
                             "event_type": completed.event_type,
                             "schema_version": completed.schema_version,
                             "event_id": completed.event_id,
-                            "x-request-id": completed.request_id,
+                            "x-request-id": completed.request_id or "",
                         }
                     ),
                     created_at=datetime.now(UTC).replace(tzinfo=None),
+                    status="pending",
+                    claimed_at=None,
                 )
             )
             await session.commit()
 
-    async def list_pending_outbox(self, limit: int = 50) -> list[OutboxMessageRow]:
+    async def claim_pending(self, limit: int = 50) -> list[OutboxPending]:
+        """Atomically claim pending/stale outbox rows (SKIP LOCKED)."""
+        now = datetime.now(UTC).replace(tzinfo=None)
+        stale_before = now - _CLAIM_STALE_AFTER
+        claimed: list[OutboxPending] = []
         async with self._session_factory() as session:
-            rows = await session.scalars(
-                select(OutboxMessageRow)
-                .where(OutboxMessageRow.published_at.is_(None))
-                .order_by(OutboxMessageRow.id)
-                .limit(limit)
-            )
-            return list(rows)
+            for _ in range(limit):
+                row = await session.scalar(
+                    select(OutboxMessageRow)
+                    .where(
+                        or_(
+                            OutboxMessageRow.status == "pending",
+                            (
+                                (OutboxMessageRow.status == "processing")
+                                & (OutboxMessageRow.claimed_at < stale_before)
+                            ),
+                        )
+                    )
+                    .order_by(OutboxMessageRow.id)
+                    .with_for_update(skip_locked=True)
+                    .limit(1)
+                )
+                if row is None:
+                    break
+                row.status = "processing"
+                row.claimed_at = now
+                headers_raw = json.loads(row.headers_json or "{}")
+                headers = (
+                    {
+                        str(key): str(value)
+                        for key, value in headers_raw.items()
+                        if value is not None
+                    }
+                    if isinstance(headers_raw, dict)
+                    else {}
+                )
+                claimed.append(
+                    {
+                        "id": row.id,
+                        "routing_key": row.routing_key,
+                        "payload": row.payload.encode("utf-8"),
+                        "headers": headers,
+                    }
+                )
+            await session.commit()
+        return claimed
 
-    async def mark_outbox_published(self, outbox_id: int) -> None:
+    async def mark_published(self, outbox_id: int) -> None:
         async with self._session_factory() as session:
             row = await session.get(OutboxMessageRow, outbox_id)
             if row is None:
                 return
+            row.status = "published"
             row.published_at = datetime.now(UTC).replace(tzinfo=None)
+            row.claimed_at = None
             await session.commit()
+
+    async def release_outbox_claim(self, outbox_id: int) -> None:
+        """Return a failed outbox publish attempt to pending."""
+        async with self._session_factory() as session:
+            row = await session.get(OutboxMessageRow, outbox_id)
+            if row is not None and row.status == "processing":
+                row.status = "pending"
+                row.claimed_at = None
+                await session.commit()
 
     async def get(self, external_id: str) -> PricingResult:
         async with self._session_factory() as session:

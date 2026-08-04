@@ -1,7 +1,7 @@
 # Market Pricer Service
 
 Consumes `car.enriched.success`, applies margin/turnover rules, persists
-results to MySQL.
+results to MySQL, and publishes `car.priced.success` via an outbox.
 
 ## Run
 
@@ -20,16 +20,17 @@ make migrate-docker  # same container image as the app
 
 | Module | Role |
 |--------|------|
-| `app/api/pricing.py` | Estimate + get endpoints |
-| `app/consumers/enriched_listing_consumer.py` | aio_pika consumer |
-| `app/messaging/topology.py` | Topic exchange + DLQ |
-| `app/services/margin_rules.py` | Deterministic rule engine |
-| `app/services/pricing_service.py` | Price + persist |
-| `app/repositories/pricing_repository.py` | Async MySQL upsert/get |
-| `app/db/session.py` | SQLAlchemy async engine |
+| `app/api/pricing.py` | Dry-run estimate + durable price + get |
+| `app/bootstrap/` | Composition root + process lifecycle |
+| `app/consumers/enriched_listing_consumer.py` | aio_pika + TTL retry + DLQ |
+| `app/messaging/` | Topology (work + TTL retry + DLQ), outbox, retry |
+| `app/services/` | Engine protocol, rules/sklearn, pricing service |
+| `app/repositories/pricing_repository.py` | MySQL pricing + inbox + outbox |
 | `alembic/` | Schema migrations |
 
-## Next TODOs
+## Reliability notes
 
-Optional: set `PRICING_ENGINE=sklearn` for the Ridge model. Stretch items
-(UI, metrics, crawlers) live in `docs/roadmap.md`.
+- Inbox: `processing` → `completed` (released on failure for TTL retries)
+- Pricing + outbox insert share one MySQL commit
+- Outbox drain on success + periodic ticker (`OUTBOX_DRAIN_INTERVAL_SEC`)
+- `POST /api/v1/pricing/estimate` is dry-run; `POST /api/v1/pricing` persists

@@ -20,16 +20,20 @@ enqueued, and the inbox claim is marked ``completed``. Inbox rows use
 
 ### Market Pricer Service
 
-- **Ingress:** `car.enriched.success` (+ HTTP estimate for debugging)
+- **Ingress:** `car.enriched.success` (+ HTTP estimate / durable price)
 - **Logic:** `PricingEngine` protocol — `MarginRuleEngine` (default) or
   `SklearnPricingEngine` via `PRICING_ENGINE=sklearn`
-- **State:** MySQL `pricing_results`
+- **State:** MySQL `pricing_results` + inbox/outbox tables
 - **Outputs:** `bid_price`, `recommended_dealer_bid`, `estimated_turnover_days`
+
+Ack rule: broker ack only after durable pricing+outbox write and inbox
+``completed``. Inbox uses ``processing`` → ``completed`` (released on
+failure so TTL retries can reclaim).
 
 ### Messaging
 
 - Exchange type: **topic** (`autopulse.cars`)
-- Queues: durable, with dead-letter exchange for enrichment
+- Queues: durable, with dead-letter exchange for enrichment and pricer
 - Headers: propagate `request_id` / `event_id` when present
 
 ## Data ownership
@@ -66,10 +70,13 @@ services/enrichment/app/
   repositories/  Mongo adapters (listings, inbox, outbox)
   core/          config, middleware, circuit breaker, metrics
 
+```
 services/pricer/app/
   api/
+  bootstrap/     composition root + process lifecycle
   consumers/
-  services/      pricing + margin rules
+  services/      pricing engine + ports + margin/sklearn
+  messaging/     topology, outbox publisher, TTL retry
   repositories/  MySQL adapters
   models/        SQLAlchemy ORM
 ```
