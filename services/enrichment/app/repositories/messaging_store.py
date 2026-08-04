@@ -21,10 +21,10 @@ class OutboxPendingDoc(TypedDict):
     routing_key: str
     body: Any
     headers: dict[str, str]
-    created_at: str
-    published_at: str | None
+    created_at: datetime
+    published_at: datetime | None
     status: OutboxStatus
-    claimed_at: str | None
+    claimed_at: datetime | None
 
 
 class InboxRepository:
@@ -48,7 +48,7 @@ class InboxRepository:
             await self._collection.insert_one(
                 {
                     "event_id": event_id,
-                    "claimed_at": datetime.now(UTC).isoformat(),
+                    "claimed_at": datetime.now(UTC),
                 }
             )
             return True
@@ -89,7 +89,7 @@ class OutboxRepository:
                 "routing_key": routing_key,
                 "body": body,
                 "headers": headers,
-                "created_at": datetime.now(UTC).isoformat(),
+                "created_at": datetime.now(UTC),
                 "published_at": None,
                 "status": "pending",
                 "claimed_at": None,
@@ -106,8 +106,7 @@ class OutboxRepository:
         """
         claimed: list[OutboxPendingDoc] = []
         now = datetime.now(UTC)
-        now_iso = now.isoformat()
-        stale_before = (now - _CLAIM_STALE_AFTER).isoformat()
+        stale_before = now - _CLAIM_STALE_AFTER
         claimable = {
             "$or": [
                 {"status": "pending"},
@@ -125,7 +124,7 @@ class OutboxRepository:
                 {
                     "$set": {
                         "status": "processing",
-                        "claimed_at": now_iso,
+                        "claimed_at": now,
                     }
                 },
                 sort=[("created_at", 1)],
@@ -142,7 +141,7 @@ class OutboxRepository:
             {
                 "$set": {
                     "status": "published",
-                    "published_at": datetime.now(UTC).isoformat(),
+                    "published_at": datetime.now(UTC),
                     "claimed_at": None,
                 }
             },

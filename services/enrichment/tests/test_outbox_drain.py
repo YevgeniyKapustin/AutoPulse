@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -30,7 +31,8 @@ class _MemoryOutbox:
             "routing_key": routing_key,
             "body": body,
             "headers": headers,
-            "created_at": f"2026-01-01T00:00:{len(self.docs):02d}",
+            "created_at": datetime(2026, 1, 1, tzinfo=UTC)
+            + timedelta(seconds=len(self.docs)),
             "published_at": None,
             "status": "pending",
             "claimed_at": None,
@@ -39,19 +41,20 @@ class _MemoryOutbox:
 
     async def claim_pending(self, limit: int = 50) -> list[OutboxPendingDoc]:
         claimed: list[OutboxPendingDoc] = []
+        now = datetime.now(UTC)
         for doc in sorted(self.docs.values(), key=lambda item: item["created_at"]):
             if doc["status"] != "pending":
                 continue
             if len(claimed) >= limit:
                 break
             doc["status"] = "processing"
-            doc["claimed_at"] = "now"
+            doc["claimed_at"] = now
             claimed.append(doc)  # type: ignore[arg-type]
         return claimed
 
     async def mark_published(self, outbox_id: str) -> None:
         self.docs[outbox_id]["status"] = "published"
-        self.docs[outbox_id]["published_at"] = "done"
+        self.docs[outbox_id]["published_at"] = datetime.now(UTC)
         self.docs[outbox_id]["claimed_at"] = None
 
     async def release_claim(self, outbox_id: str) -> None:
