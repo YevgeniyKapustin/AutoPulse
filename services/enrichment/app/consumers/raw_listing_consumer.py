@@ -31,7 +31,7 @@ from services.enrichment.app.messaging.topology import (
     open_publisher_channel,
 )
 from services.enrichment.app.repositories.messaging_store import OutboxRepository
-from services.enrichment.app.services.enrichment_orchestrator import (
+from services.enrichment.app.enrichment.orchestrator import (
     EnrichmentOrchestrator,
 )
 

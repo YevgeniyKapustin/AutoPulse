@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request, status
 
 from autopulse_shared.schemas.errors import ErrorResponse
 from autopulse_shared.schemas.listing import EnrichedListing, RawListing
-from services.enrichment.app.services.enrichment_orchestrator import (
+from services.enrichment.app.enrichment.orchestrator import (
     EnrichmentOrchestrator,
 )
 

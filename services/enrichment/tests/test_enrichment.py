@@ -1,11 +1,11 @@
 import pytest
 from services.enrichment.app.core.config import Settings
 from services.enrichment.app.repositories.memory import InMemoryListingRepository
-from services.enrichment.app.services.cv_service import CvService
-from services.enrichment.app.services.enrichment_orchestrator import (
+from services.enrichment.app.cv import CvService
+from services.enrichment.app.enrichment.orchestrator import (
     EnrichmentOrchestrator,
 )
-from services.enrichment.app.services.llm_service import LlmService
+from services.enrichment.app.llm import LlmService
 
 from autopulse_shared.schemas.events import (
     EnrichmentFailedEvent,
@@ -96,9 +96,14 @@ def test_cv_inspect_dark_image() -> None:
     from io import BytesIO
 
     from PIL import Image
+    from pydantic import HttpUrl
+
+    from services.enrichment.app.cv.analyzer import ImageAnalyzer
 
     buf = BytesIO()
     Image.new("RGB", (64, 64), color=(5, 5, 5)).save(buf, format="JPEG")
-    cv = CvService()
-    defects = cv._inspect_bytes(buf.getvalue(), "https://example.com/dark.jpg")
+    defects = ImageAnalyzer().inspect(
+        buf.getvalue(),
+        HttpUrl("https://example.com/dark.jpg"),
+    )
     assert any(d.label == "very_dark_image" for d in defects)

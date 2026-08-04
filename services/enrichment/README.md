@@ -15,9 +15,9 @@ uvicorn services.enrichment.app.main:app --reload --port 8001
 |--------|------|
 | `app/consumers/raw_listing_consumer.py` | aio_pika + DLQ retries |
 | `app/messaging/` | Topology + event publisher |
-| `app/services/enrichment_orchestrator.py` | Aggregation coordinator |
-| `app/services/llm_service.py` | Heuristic / OpenAI extraction |
-| `app/services/cv_service.py` | Pillow image heuristics |
+| `app/enrichment/` | Aggregation orchestrator |
+| `app/llm/` | Heuristic + OpenAI option extraction |
+| `app/cv/` | Image fetch + Pillow heuristics |
 | `app/repositories/listing_repository.py` | Motor upsert/get |
 | `app/core/circuit_breaker.py` | External API breaker |
 

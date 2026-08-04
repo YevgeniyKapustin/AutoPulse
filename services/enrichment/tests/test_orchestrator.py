@@ -2,11 +2,11 @@ import pytest
 from services.enrichment.app.core.circuit_breaker import CircuitBreaker
 from services.enrichment.app.core.config import Settings
 from services.enrichment.app.repositories.memory import InMemoryListingRepository
-from services.enrichment.app.services.cv_service import CvService
-from services.enrichment.app.services.enrichment_orchestrator import (
+from services.enrichment.app.cv import CvService
+from services.enrichment.app.enrichment.orchestrator import (
     EnrichmentOrchestrator,
 )
-from services.enrichment.app.services.llm_service import LlmService
+from services.enrichment.app.llm import LlmService
 
 from autopulse_shared.schemas.events import ListingEnrichedEvent, RawListingEvent
 from autopulse_shared.schemas.listing import EnrichedListing, RawListing
@@ -28,7 +28,7 @@ class FakePublisher:
 
 
 class QuietCv(CvService):
-    def _detect_sync(self, listing: RawListing) -> list:
+    async def detect_defects(self, listing: RawListing) -> list:
         return []
 
 

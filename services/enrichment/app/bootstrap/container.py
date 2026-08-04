@@ -25,11 +25,11 @@ from services.enrichment.app.repositories.messaging_store import (
     InboxRepository,
     OutboxRepository,
 )
-from services.enrichment.app.services.cv_service import CvService
-from services.enrichment.app.services.enrichment_orchestrator import (
+from services.enrichment.app.cv import CvService
+from services.enrichment.app.enrichment.orchestrator import (
     EnrichmentOrchestrator,
 )
-from services.enrichment.app.services.llm_service import LlmService
+from services.enrichment.app.llm import LlmService
 
 
 @dataclass
@@ -135,4 +135,5 @@ async def shutdown_runtime(runtime: EnrichmentRuntime) -> None:
     if connection is not None and not connection.is_closed:
         await connection.close()
         runtime.publisher_connection = None
+    await runtime.orchestrator.aclose()
     runtime.mongo_client.close()
