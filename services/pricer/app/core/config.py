@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import quote, quote_plus
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -56,23 +57,32 @@ class Settings(BaseSettings):
 
     @property
     def rabbitmq_url(self) -> str:
-        vhost = "" if self.rabbitmq_vhost in {"", "/"} else self.rabbitmq_vhost
+        user = quote_plus(self.rabbitmq_user)
+        password = quote_plus(self.rabbitmq_password)
+        if self.rabbitmq_vhost in {"", "/"}:
+            vhost = ""
+        else:
+            vhost = quote(self.rabbitmq_vhost, safe="")
         return (
-            f"amqp://{self.rabbitmq_user}:{self.rabbitmq_password}"
+            f"amqp://{user}:{password}"
             f"@{self.rabbitmq_host}:{self.rabbitmq_port}/{vhost}"
         )
 
     @property
     def mysql_dsn(self) -> str:
+        user = quote_plus(self.mysql_user)
+        password = quote_plus(self.mysql_password)
         return (
-            f"mysql+aiomysql://{self.mysql_user}:{self.mysql_password}"
+            f"mysql+aiomysql://{user}:{password}"
             f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}"
         )
 
     @property
     def mysql_sync_dsn(self) -> str:
+        user = quote_plus(self.mysql_user)
+        password = quote_plus(self.mysql_password)
         return (
-            f"mysql+pymysql://{self.mysql_user}:{self.mysql_password}"
+            f"mysql+pymysql://{user}:{password}"
             f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}"
         )
 

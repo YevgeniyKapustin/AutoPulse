@@ -55,7 +55,9 @@ class OpenAiOptionsClient:
             description=listing.description or "",
         )
         headers = {
-            "Authorization": f"Bearer {self._settings.llm_api_key}",
+            "Authorization": (
+                f"Bearer {self._settings.llm_api_key.get_secret_value()}"
+            ),
             "Content-Type": "application/json",
         }
         body: dict[str, Any] = {

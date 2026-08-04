@@ -1,6 +1,8 @@
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import quote, quote_plus
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 RunMode = Literal["api", "worker", "all"]
@@ -51,7 +53,8 @@ class Settings(BaseSettings):
 
     llm_provider: LlmProvider = "openai"
     llm_model: str = "gpt-4o-mini"
-    llm_api_key: str = ""
+    # Empty default keeps local heuristic path; use SecretStr so dumps hide the value.
+    llm_api_key: SecretStr = SecretStr("")
     llm_timeout_sec: int = 30
     llm_max_retries: int = 3
     cv_max_workers: int = 4
@@ -62,9 +65,14 @@ class Settings(BaseSettings):
 
     @property
     def rabbitmq_url(self) -> str:
-        vhost = "" if self.rabbitmq_vhost in {"", "/"} else self.rabbitmq_vhost
+        user = quote_plus(self.rabbitmq_user)
+        password = quote_plus(self.rabbitmq_password)
+        if self.rabbitmq_vhost in {"", "/"}:
+            vhost = ""
+        else:
+            vhost = quote(self.rabbitmq_vhost, safe="")
         return (
-            f"amqp://{self.rabbitmq_user}:{self.rabbitmq_password}"
+            f"amqp://{user}:{password}"
             f"@{self.rabbitmq_host}:{self.rabbitmq_port}/{vhost}"
         )
 
