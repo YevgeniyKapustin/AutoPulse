@@ -1,4 +1,5 @@
 """Publish enrichment domain events with confirms and mandatory routing."""
+
 from __future__ import annotations
 
 import logging
@@ -101,7 +102,5 @@ class EventPublisher:
                 "autopulse_publish_unroutable_total",
                 routing_key=routing_key,
             )
-            raise PublishError(
-                f"Unroutable message for key={routing_key}"
-            ) from err
+            raise PublishError(f"Unroutable message for key={routing_key}") from err
         self._metrics.inc("autopulse_publish_ok_total", routing_key=routing_key)

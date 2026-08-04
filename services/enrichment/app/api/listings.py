@@ -8,8 +8,9 @@ from fastapi import APIRouter, Request, status
 
 from autopulse_shared.schemas.errors import ErrorResponse
 from autopulse_shared.schemas.listing import EnrichedListing, RawListing
-from services.enrichment.app.enrichment.orchestrator import (
-    EnrichmentOrchestrator,
+from services.enrichment.app.enrichment.ports import (
+    ListingReader,
+    RawListingIngestor,
 )
 
 router = APIRouter(prefix="/listings", tags=["listings"])
@@ -27,8 +28,8 @@ async def ingest_raw_listing(
 ) -> IngestAcceptedResponse:
     """Accept raw listing JSON and enqueue enrichment."""
     request_id: str | None = getattr(request.state, "request_id", None)
-    orchestrator: EnrichmentOrchestrator = request.app.state.orchestrator
-    event_id: str = await orchestrator.enqueue_raw(listing, request_id=request_id)
+    ingestor: RawListingIngestor = request.app.state.orchestrator
+    event_id: str = await ingestor.enqueue_raw(listing, request_id=request_id)
     return {"status": "accepted", "event_id": event_id}
 
 
@@ -42,6 +43,6 @@ async def ingest_raw_listing(
     },
 )
 async def get_listing_state(external_id: str, request: Request) -> EnrichedListing:
-    """Return the current enriched listing document for ``external_id``."""
-    orchestrator: EnrichmentOrchestrator = request.app.state.orchestrator
-    return await orchestrator.get_state(external_id)
+    """Return current enriched listing for ``external_id``."""
+    reader: ListingReader = request.app.state.orchestrator
+    return await reader.get_state(external_id)

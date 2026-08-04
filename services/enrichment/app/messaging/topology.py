@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from aio_pika import ExchangeType, connect_robust as aio_connect_robust
+from aio_pika import ExchangeType
+from aio_pika import connect_robust as aio_connect_robust
 from aio_pika.abc import (
     AbstractChannel,
     AbstractExchange,

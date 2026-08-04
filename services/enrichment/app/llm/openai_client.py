@@ -6,8 +6,8 @@ from typing import Any
 
 import httpx
 from tenacity import (
-    retry,
-    retry_if_exception_type,
+    AsyncRetrying,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -19,8 +19,17 @@ from services.enrichment.app.llm.prompts import (
     USER_PROMPT_TEMPLATE,
 )
 
-_NETWORK_ERRORS = (httpx.HTTPError, TimeoutError)
+_NETWORK_ERRORS = (httpx.TransportError, TimeoutError, httpx.TimeoutException)
 _OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    if isinstance(exc, _NETWORK_ERRORS):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        return status == 429 or status >= 500
+    return False
 
 
 class OpenAiOptionsClient:
@@ -29,14 +38,20 @@ class OpenAiOptionsClient:
     def __init__(self, settings: Settings, http_client: httpx.AsyncClient) -> None:
         self._settings = settings
         self._http = http_client
+        self._max_attempts = max(1, settings.llm_max_retries)
 
-    @retry(
-        reraise=True,
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
-        retry=retry_if_exception_type(_NETWORK_ERRORS),
-    )
     async def extract(self, listing: RawListing) -> ListingOptions:
+        async for attempt in AsyncRetrying(
+            reraise=True,
+            stop=stop_after_attempt(self._max_attempts),
+            wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
+            retry=retry_if_exception(_is_retryable),
+        ):
+            with attempt:
+                return await self._extract_once(listing)
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    async def _extract_once(self, listing: RawListing) -> ListingOptions:
         headers, body = self._build_request(listing)
         response = await self._http.post(
             _OPENAI_CHAT_URL,

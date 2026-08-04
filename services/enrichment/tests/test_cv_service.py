@@ -6,7 +6,6 @@ import httpx
 import pytest
 from PIL import Image
 from pydantic import HttpUrl
-
 from services.enrichment.app.cv import CvService, ImageAnalyzer
 from services.enrichment.app.cv.service import _MAX_DOWNLOAD_BYTES
 

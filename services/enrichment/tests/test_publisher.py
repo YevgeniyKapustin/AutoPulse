@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from aio_pika.exceptions import DeliveryError
 from pamqp.commands import Basic
-
-from autopulse_shared.schemas.events import EventType, RawListingEvent
-from autopulse_shared.schemas.listing import ListingSource, RawListing
 from services.enrichment.app.messaging.event_message import serialize_event
 from services.enrichment.app.messaging.publisher import EventPublisher, PublishError
 from services.enrichment.app.messaging.routes import PublishRoutes
+
+from autopulse_shared.schemas.events import EventType, RawListingEvent
+from autopulse_shared.schemas.listing import ListingSource, RawListing
 
 
 class FakeMetrics:

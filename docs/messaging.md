@@ -9,7 +9,7 @@
 | Publisher confirms + `mandatory` | Done |
 | Prefetch limits | Done |
 | ACK after side effect | Done |
-| Idempotent inbox (`event_id`) | Done |
+| Idempotent inbox (`event_id`, processing→completed) | Done |
 | Transactional outbox | Done (Mongo enrichment w/ claim, MySQL pricer) |
 | Retry backoff + DLQ | Done |
 | Graceful shutdown < grace period | Done (`SHUTDOWN_TIMEOUT_SEC` / 25s) |

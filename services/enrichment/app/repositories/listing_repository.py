@@ -37,7 +37,7 @@ class ListingRepository:
         await self._collection.create_index("external_id", unique=True)
 
     async def upsert(self, listing: EnrichedListing) -> None:
-        """Replace listing fields for ``external_id`` (full document $set).
+        """Upsert listing fields for ``external_id`` via document ``$set``.
 
         Uses JSON-safe scalars for URLs/enums, but keeps datetime fields as
         native BSON dates so reads stay type-stable across upserts.

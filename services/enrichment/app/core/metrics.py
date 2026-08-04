@@ -36,9 +36,7 @@ class MetricsRegistry:
                 lines.append(f"# TYPE {name} counter")
                 declared.add(name)
             if labels:
-                label_str = ",".join(
-                    f'{k}="{_escape_label(v)}"' for k, v in labels
-                )
+                label_str = ",".join(f'{k}="{_escape_label(v)}"' for k, v in labels)
                 lines.append(f"{name}{{{label_str}}} {value}")
             else:
                 lines.append(f"{name} {value}")

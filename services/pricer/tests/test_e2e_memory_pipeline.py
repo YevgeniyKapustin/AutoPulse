@@ -4,7 +4,6 @@ import pytest
 from services.enrichment.app.core.circuit_breaker import CircuitBreaker
 from services.enrichment.app.core.config import Settings as EnrichmentSettings
 from services.enrichment.app.repositories.memory import InMemoryListingRepository
-from services.enrichment.app.cv import CvService
 from services.enrichment.app.enrichment.orchestrator import (
     EnrichmentOrchestrator,
 )
@@ -32,9 +31,12 @@ class FakePublisher:
         self.failed.append(event)
 
 
-class QuietCv(CvService):
-    def _detect_sync(self, listing: RawListing) -> list:
+class QuietCv:
+    async def detect_defects(self, listing: RawListing) -> list:
         return []
+
+    async def aclose(self) -> None:
+        return None
 
 
 @pytest.mark.asyncio

@@ -9,13 +9,19 @@ import httpx
 from pydantic import ValidationError
 
 from autopulse_shared.schemas.listing import ListingOptions, RawListing
-from services.enrichment.app.core.circuit_breaker import CircuitBreaker
+from services.enrichment.app.core.circuit_breaker import (
+    CircuitBreaker,
+    CircuitOpenError,
+)
 from services.enrichment.app.core.config import Settings
-from services.enrichment.app.core.exceptions import EnrichmentError
+from services.enrichment.app.core.exceptions import (
+    EnrichmentError,
+    PermanentEnrichmentError,
+)
 from services.enrichment.app.llm.heuristic import HeuristicOptionsExtractor
 from services.enrichment.app.llm.openai_client import OpenAiOptionsClient
 
-_NETWORK_ERRORS = (httpx.HTTPError, TimeoutError)
+_NETWORK_ERRORS = (httpx.TransportError, TimeoutError, httpx.TimeoutException)
 _PARSE_ERRORS = (
     KeyError,
     IndexError,
@@ -51,7 +57,7 @@ class LlmService:
         )
 
     async def aclose(self) -> None:
-        """Close the owned HTTP client (no-op if client was injected)."""
+        """Close owned HTTP client (no-op if client was injected)."""
         if self._owns_http:
             await self._http.aclose()
 
@@ -67,13 +73,29 @@ class LlmService:
         await self.aclose()
 
     async def extract_options(self, listing: RawListing) -> ListingOptions:
-        # Local heuristic is not an external dependency — skip the breaker.
+        # Local heuristic is not an external dependency — skip the
+        # breaker.
         if not self._settings.llm_api_key.get_secret_value():
             return self._heuristic.extract(listing)
 
         await self._breaker.before_call()
         try:
             options = await self._openai.extract(listing)
+        except CircuitOpenError:
+            raise
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            if status == 429 or status >= 500:
+                await self._breaker.record_failure()
+                raise EnrichmentError(
+                    f"LLM API HTTP {status}: {exc}",
+                    stage="llm",
+                ) from exc
+            await self._breaker.record_success()
+            raise PermanentEnrichmentError(
+                f"LLM API client error HTTP {status}: {exc}",
+                stage="llm",
+            ) from exc
         except _NETWORK_ERRORS as exc:
             await self._breaker.record_failure()
             raise EnrichmentError(
@@ -81,11 +103,13 @@ class LlmService:
                 stage="llm",
             ) from exc
         except _PARSE_ERRORS as exc:
-            # Transport succeeded; do not punish the circuit for bad payloads.
+            # Transport succeeded; do not punish the circuit for bad
+            # payloads.
             await self._breaker.record_success()
             raise EnrichmentError(
                 f"LLM parsing error: {exc}",
                 stage="llm",
+                retryable=False,
             ) from exc
         except Exception as exc:
             await self._breaker.record_failure()

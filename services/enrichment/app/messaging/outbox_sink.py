@@ -12,12 +12,8 @@ from autopulse_shared.schemas.events import (
     RawListingEvent,
 )
 from services.enrichment.app.messaging.event_message import serialize_event
-from services.enrichment.app.messaging.publisher import EventPublisher
 from services.enrichment.app.messaging.routes import PublishRoutes
-from services.enrichment.app.repositories.messaging_store import (
-    OutboxPendingDoc,
-    OutboxRepository,
-)
+from services.enrichment.app.repositories.messaging_store import OutboxPendingDoc
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +33,22 @@ class OutboxStore(Protocol):
     async def release_claim(self, outbox_id: str) -> None: ...
 
 
+class RawBodyPublisher(Protocol):
+    async def publish_raw_body(
+        self,
+        body: bytes,
+        routing_key: str,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None: ...
+
+
 class OutboxEventSink:
     def __init__(
         self,
         routes: PublishRoutes,
-        outbox: OutboxRepository,
-        publisher: EventPublisher,
+        outbox: OutboxStore,
+        publisher: RawBodyPublisher,
     ) -> None:
         self._routes = routes
         self._outbox = outbox
@@ -58,10 +64,10 @@ class OutboxEventSink:
         await self._enqueue_and_drain(event, self._routes.enrichment_failed)
 
     async def drain(self, limit: int = 50) -> int:
-        """Claim pending outbox rows and publish them (multi-replica safe).
+        """Claim pending outbox rows and publish (multi-replica safe).
 
-        Per-row publish failures release that claim and continue the batch so
-        other claimed rows are not left stuck in ``processing``.
+        Per-row publish failures release that claim and continue the
+        batch so other rows are not stuck in ``processing``.
         """
         pending = await self._outbox.claim_pending(limit=limit)
         published = 0
@@ -88,7 +94,8 @@ class OutboxEventSink:
             payload.body,
             dict(payload.headers),
         )
-        # Durable write already succeeded; broker hiccups must not fail the
+        # Durable write already succeeded; broker hiccups must not fail
+        # the
         # business path — a later drain / replica will republish.
         try:
             await self.drain()

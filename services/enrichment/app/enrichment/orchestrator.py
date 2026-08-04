@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import Protocol
 
 from autopulse_shared.schemas.events import (
     EnrichmentFailedEvent,
@@ -13,48 +12,42 @@ from autopulse_shared.schemas.events import (
     RawListingEvent,
 )
 from autopulse_shared.schemas.listing import (
-    DefectInfo,
     EnrichedListing,
-    ListingOptions,
     RawListing,
 )
 from services.enrichment.app.core.exceptions import (
     EnrichmentError,
     EnrichmentStage,
 )
-from services.enrichment.app.cv import CvService
-from services.enrichment.app.llm import LlmService
-
-
-class ListingStore(Protocol):
-    async def upsert(self, listing: EnrichedListing) -> None: ...
-
-    async def get(self, external_id: str) -> EnrichedListing: ...
-
-    async def get_optional(self, external_id: str) -> EnrichedListing | None: ...
-
-
-class EventSink(Protocol):
-    async def publish_raw(self, event: RawListingEvent) -> None: ...
-
-    async def publish_enriched(self, event: ListingEnrichedEvent) -> None: ...
-
-    async def publish_failed(self, event: EnrichmentFailedEvent) -> None: ...
-
+from services.enrichment.app.enrichment.ports import (
+    DefectDetector,
+    EventSink,
+    ListingStore,
+    OptionsExtractor,
+)
 
 logger = logging.getLogger(__name__)
 
 
-async def _const[T](value: T) -> T:
-    return value
+def _enrichment_fingerprint(listing: RawListing) -> tuple[object, ...]:
+    """Fields that should trigger re-enrichment when they change."""
+    return (
+        listing.title,
+        listing.description,
+        listing.make,
+        listing.model,
+        listing.year,
+        listing.asking_price,
+        tuple(str(url) for url in listing.image_urls),
+    )
 
 
 class EnrichmentOrchestrator:
     def __init__(
         self,
         repository: ListingStore,
-        llm: LlmService,
-        cv: CvService,
+        llm: OptionsExtractor,
+        cv: DefectDetector,
         publisher: EventSink | None = None,
     ) -> None:
         self._repository = repository
@@ -98,7 +91,11 @@ class EnrichmentOrchestrator:
     ) -> EnrichedListing:
         """Run LLM/CV stages, persist aggregation, publish success."""
         existing = await self._repository.get_optional(listing.external_id)
-        if existing is not None and existing.is_fully_enriched:
+        if (
+            existing is not None
+            and existing.is_fully_enriched
+            and _enrichment_fingerprint(existing) == _enrichment_fingerprint(listing)
+        ):
             await self._publish_enriched(
                 existing,
                 event_id=event_id,
@@ -108,8 +105,8 @@ class EnrichmentOrchestrator:
             return existing
 
         state = await self._prepare_state(listing, existing)
-        options, defects = await self._run_stages(listing, state)
-        state = await self._persist_aggregation(state, options, defects)
+        state = await self._run_stages(listing, state)
+        state = await self._finalize_aggregation(state)
         await self._publish_enriched(
             state,
             event_id=event_id,
@@ -154,10 +151,16 @@ class EnrichmentOrchestrator:
         """Build working state, resume partial progress, and persist."""
         state = EnrichedListing.model_validate(listing.model_dump())
         if existing is not None:
-            state.llm_done = existing.llm_done
-            state.cv_done = existing.cv_done
-            state.options = existing.options
-            state.defects = existing.defects
+            same_inputs = _enrichment_fingerprint(existing) == _enrichment_fingerprint(
+                listing
+            )
+            if same_inputs:
+                state.llm_done = existing.llm_done
+                state.cv_done = existing.cv_done
+                state.options = existing.options
+                state.defects = existing.defects
+            # Changed payload: re-run stages from scratch on the new raw
+            # body.
         await self._repository.upsert(state)
         return state
 
@@ -165,35 +168,40 @@ class EnrichmentOrchestrator:
         self,
         listing: RawListing,
         state: EnrichedListing,
-    ) -> tuple[ListingOptions, list[DefectInfo]]:
-        """Run pending LLM/CV work in parallel (skip stages already done)."""
-        llm_coro = (
-            self._llm.extract_options(listing)
-            if not state.llm_done
-            else _const(state.options)
-        )
-        cv_coro = (
-            self._cv.detect_defects(listing)
-            if not state.cv_done
-            else _const(state.defects)
-        )
-        return await asyncio.gather(llm_coro, cv_coro)
-
-    async def _persist_aggregation(
-        self,
-        state: EnrichedListing,
-        options: ListingOptions,
-        defects: list[DefectInfo],
     ) -> EnrichedListing:
-        """Apply stage results, mark done, and require full aggregation."""
-        state.options = options
-        state.defects = defects
-        state.llm_done = True
-        state.cv_done = True
-        state.enriched_at = datetime.now(UTC)
-        await self._repository.upsert(state)
+        """Run pending LLM/CV work; persist each finished stage."""
+        persist_lock = asyncio.Lock()
+
+        async def run_llm() -> None:
+            if state.llm_done:
+                return
+            options = await self._llm.extract_options(listing)
+            async with persist_lock:
+                state.options = options
+                state.llm_done = True
+                await self._repository.upsert(state)
+
+        async def run_cv() -> None:
+            if state.cv_done:
+                return
+            defects = await self._cv.detect_defects(listing)
+            async with persist_lock:
+                state.defects = defects
+                state.cv_done = True
+                await self._repository.upsert(state)
+
+        results = await asyncio.gather(run_llm(), run_cv(), return_exceptions=True)
+        errors = [item for item in results if isinstance(item, BaseException)]
+        if errors:
+            raise errors[0]
+        return state
+
+    async def _finalize_aggregation(self, state: EnrichedListing) -> EnrichedListing:
+        """Stamp enriched_at and require both stages before publish."""
         if not state.is_fully_enriched:
             raise EnrichmentError("Aggregation incomplete", stage="aggregate")
+        state.enriched_at = datetime.now(UTC)
+        await self._repository.upsert(state)
         return state
 
     async def _publish_enriched(

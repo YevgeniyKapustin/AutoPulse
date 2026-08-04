@@ -21,6 +21,24 @@ class EnrichmentError(RuntimeError):
         message: str,
         *,
         stage: EnrichmentStage | None = None,
+        retryable: bool = True,
     ) -> None:
         self.stage: EnrichmentStage | None = stage
+        self.retryable: bool = retryable
         super().__init__(message)
+
+
+class MalformedMessageError(ValueError):
+    """Payload cannot be parsed into a domain event (poison message)."""
+
+
+class PermanentEnrichmentError(EnrichmentError):
+    """Non-retryable enrichment failure (bad input / client 4xx)."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        stage: EnrichmentStage | None = None,
+    ) -> None:
+        super().__init__(message, stage=stage, retryable=False)

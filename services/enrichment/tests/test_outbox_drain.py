@@ -7,12 +7,12 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
-
-from autopulse_shared.schemas.events import RawListingEvent
-from autopulse_shared.schemas.listing import RawListing
 from services.enrichment.app.messaging.outbox_sink import OutboxEventSink
 from services.enrichment.app.messaging.routes import PublishRoutes
 from services.enrichment.app.repositories.messaging_store import OutboxPendingDoc
+
+from autopulse_shared.schemas.events import RawListingEvent
+from autopulse_shared.schemas.listing import RawListing
 
 
 def _routes() -> PublishRoutes:
@@ -79,7 +79,7 @@ async def test_drain_publishes_claimed_rows_only_once() -> None:
     await outbox.enqueue("car.raw.created", b"{}", {})
     publisher = AsyncMock()
     publisher.publish_raw_body = AsyncMock()
-    sink = OutboxEventSink(_routes(), outbox, publisher)  # type: ignore[arg-type]
+    sink = OutboxEventSink(_routes(), outbox, publisher)
 
     assert await sink.drain() == 2
     assert publisher.publish_raw_body.await_count == 2
@@ -97,7 +97,7 @@ async def test_drain_releases_claim_and_continues_batch() -> None:
     publisher.publish_raw_body = AsyncMock(
         side_effect=[RuntimeError("broker down"), None],
     )
-    sink = OutboxEventSink(_routes(), outbox, publisher)  # type: ignore[arg-type]
+    sink = OutboxEventSink(_routes(), outbox, publisher)
 
     assert await sink.drain() == 1
     assert outbox.docs["ob-1"]["status"] == "pending"
@@ -109,7 +109,7 @@ async def test_publish_survives_drain_failure_after_enqueue() -> None:
     outbox = _MemoryOutbox()
     publisher = AsyncMock()
     publisher.publish_raw_body = AsyncMock(side_effect=RuntimeError("broker down"))
-    sink = OutboxEventSink(_routes(), outbox, publisher)  # type: ignore[arg-type]
+    sink = OutboxEventSink(_routes(), outbox, publisher)
 
     event = RawListingEvent(listing=RawListing(external_id="e1"))
     await sink.publish_raw(event)

@@ -1,4 +1,4 @@
-"""Enrichment worker process — consumes RabbitMQ only (no public HTTP)."""
+"""Enrichment worker — RabbitMQ consumer only (no public HTTP)."""
 
 from __future__ import annotations
 
@@ -32,18 +32,18 @@ class EnrichmentWorker:
 
     async def run(self) -> None:
         """Start metrics + consumer, then block until SIGINT/SIGTERM."""
-        setup_logging(
-            self._settings.log_level,
-            service="enrichment",
-            environment=self._settings.environment,
-        )
-        self._metrics = await start_metrics_server(self._settings)
-        self._runtime = await build_runtime(self._settings)
-        await start_consumer(self._runtime)
-        self._install_signal_handlers()
-
-        logger.info("Enrichment worker running")
         try:
+            setup_logging(
+                self._settings.log_level,
+                service="enrichment",
+                environment=self._settings.environment,
+            )
+            self._metrics = await start_metrics_server(self._settings)
+            self._runtime = await build_runtime(self._settings)
+            await start_consumer(self._runtime)
+            self._install_signal_handlers()
+
+            logger.info("Enrichment worker running")
             await self._stop.wait()
         finally:
             await self._shutdown()
@@ -60,8 +60,6 @@ class EnrichmentWorker:
                 loop.add_signal_handler(sig, self.request_stop)
 
     async def _shutdown(self) -> None:
-        if self._runtime is None:
-            return
         drained = await drain_runtime_then_stop_metrics(
             self._runtime,
             self._metrics,

@@ -14,7 +14,9 @@ document-shaped; pricing is relational and queryable.
 - **State:** MongoDB document per `external_id` with flags `llm_done` / `cv_done`
 - **Egress:** `car.enriched.success` or DLQ / failed event
 
-Ack rule: broker ack only when `is_fully_enriched` is true and upsert succeeded.
+Ack rule: broker ack only when aggregation is durable, the outbox row is
+enqueued, and the inbox claim is marked ``completed``. Inbox rows use
+``processing`` → ``completed`` (released on failure so TTL retries can reclaim).
 
 ### Market Pricer Service
 
@@ -48,15 +50,21 @@ LLM/CV call
   → if retry_count >= N → DLQ
 ```
 
+Malformed / permanent failures skip TTL retry and go straight to DLQ.
+
 ## Directory map
 
 ```
 services/enrichment/app/
   api/           HTTP routes
+  bootstrap/     composition root + process lifecycle
   consumers/     aio_pika workers
-  services/      LLM, CV, orchestrator
-  repositories/  Mongo adapters
-  core/          config, middleware, circuit breaker
+  enrichment/    orchestrator + ports (protocols)
+  llm/           heuristic + OpenAI option extraction
+  cv/            image fetch + Pillow analysis
+  messaging/     topology, publisher, outbox sink, retry
+  repositories/  Mongo adapters (listings, inbox, outbox)
+  core/          config, middleware, circuit breaker, metrics
 
 services/pricer/app/
   api/

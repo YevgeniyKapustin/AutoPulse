@@ -12,7 +12,8 @@ from pymongo.errors import DuplicateKeyError
 
 OutboxStatus = Literal["pending", "processing", "published"]
 
-# Stuck "processing" rows become claimable again after a pod crash/restart.
+# Stuck "processing" rows become claimable again after a pod
+# crash/restart.
 _CLAIM_STALE_AFTER: Final[timedelta] = timedelta(minutes=5)
 
 
@@ -28,6 +29,13 @@ class OutboxPendingDoc(TypedDict):
 
 
 class InboxRepository:
+    """Idempotency store with lease-style processing claims.
+
+    ``completed`` is permanent. ``processing`` may be released on
+    failure or
+    reclaimed when stale / broker-redelivered.
+    """
+
     def __init__(self, collection: AsyncIOMotorCollection[dict[str, Any]]) -> None:
         self._collection = collection
 
@@ -42,18 +50,83 @@ class InboxRepository:
 
     async def ensure_indexes(self) -> None:
         await self._collection.create_index("event_id", unique=True)
+        await self._collection.create_index(
+            [("status", 1), ("claimed_at", 1)],
+            name="inbox_status_claimed",
+        )
 
-    async def try_claim(self, event_id: str) -> bool:
+    async def try_claim(
+        self,
+        event_id: str,
+        *,
+        reclaim_processing: bool = False,
+    ) -> bool:
+        """Acquire a processing claim for ``event_id``.
+
+        Returns False when the event is already ``completed``, or when
+        another
+        worker holds a fresh ``processing`` lease (unless
+        ``reclaim_processing`` is set for broker redeliveries).
+        """
+        now = datetime.now(UTC)
         try:
             await self._collection.insert_one(
                 {
                     "event_id": event_id,
-                    "claimed_at": datetime.now(UTC),
+                    "status": "processing",
+                    "claimed_at": now,
+                    "completed_at": None,
                 }
             )
             return True
         except DuplicateKeyError:
-            return False
+            pass
+
+        stale_before = now - _CLAIM_STALE_AFTER
+        status_filter: dict[str, Any]
+        if reclaim_processing:
+            status_filter = {"status": "processing"}
+        else:
+            status_filter = {
+                "$or": [
+                    {"status": "processing", "claimed_at": {"$lt": stale_before}},
+                    # Legacy rows written before status existed.
+                    {"status": {"$exists": False}},
+                ]
+            }
+
+        doc = await self._collection.find_one_and_update(
+            {"event_id": event_id, **status_filter},
+            {
+                "$set": {
+                    "status": "processing",
+                    "claimed_at": now,
+                    "completed_at": None,
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+        return doc is not None
+
+    async def mark_completed(self, event_id: str) -> None:
+        """Mark durable success; subsequent claims are rejected."""
+        await self._collection.update_one(
+            {"event_id": event_id},
+            {
+                "$set": {
+                    "status": "completed",
+                    "completed_at": datetime.now(UTC),
+                    "claimed_at": None,
+                }
+            },
+            upsert=True,
+        )
+
+    async def release_claim(self, event_id: str) -> None:
+        """Drop a processing claim so retries can reclaim the event."""
+        await self._collection.delete_one(
+            {"event_id": event_id, "status": "processing"},
+        )
 
 
 class OutboxRepository:
@@ -100,8 +173,10 @@ class OutboxRepository:
     async def claim_pending(self, limit: int = 50) -> list[OutboxPendingDoc]:
         """Atomically move up to ``limit`` rows to ``processing``.
 
-        Safe for multi-replica API drain: each document is claimed by at most
-        one caller via ``find_one_and_update``. Stale ``processing`` rows
+        Safe for multi-replica API drain: each document is claimed by at
+        most
+        one caller via ``find_one_and_update``. Stale ``processing``
+        rows
         (crashed publisher) are reclaimed after ``_CLAIM_STALE_AFTER``.
         """
         claimed: list[OutboxPendingDoc] = []
@@ -148,7 +223,8 @@ class OutboxRepository:
         )
 
     async def release_claim(self, outbox_id: str) -> None:
-        """Return a failed publish attempt to ``pending`` for another replica."""
+        """Return a failed publish attempt to ``pending`` for another
+        replica."""
         await self._collection.update_one(
             {"_id": outbox_id, "status": "processing"},
             {"$set": {"status": "pending", "claimed_at": None}},

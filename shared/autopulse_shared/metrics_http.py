@@ -90,27 +90,19 @@ class MetricsHttpServer:
                 body = self._render().encode("utf-8")
                 writer.write(
                     b"HTTP/1.1 200 OK\r\n"
-                    b"Content-Type: "
-                    + _CONTENT_TYPE
-                    + b"\r\n"
-                    b"Content-Length: "
-                    + str(len(body)).encode("ascii")
-                    + b"\r\n"
+                    b"Content-Type: " + _CONTENT_TYPE + b"\r\n"
+                    b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n"
                     b"Connection: close\r\n"
-                    b"\r\n"
-                    + body
+                    b"\r\n" + body
                 )
             else:
                 body = b"Not Found\n"
                 writer.write(
                     b"HTTP/1.1 404 Not Found\r\n"
                     b"Content-Type: text/plain; charset=utf-8\r\n"
-                    b"Content-Length: "
-                    + str(len(body)).encode("ascii")
-                    + b"\r\n"
+                    b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n"
                     b"Connection: close\r\n"
-                    b"\r\n"
-                    + body
+                    b"\r\n" + body
                 )
             await writer.drain()
         finally:

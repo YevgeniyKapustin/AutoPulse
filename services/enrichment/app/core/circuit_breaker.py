@@ -54,8 +54,11 @@ class CircuitBreaker:
 
     async def before_call(self) -> None:
         async with self._lock:
-            if self.state != CircuitState.OPEN:
+            if self.state == CircuitState.CLOSED:
                 return
+            if self.state == CircuitState.HALF_OPEN:
+                # One probe is already in flight; reject stampede callers.
+                raise CircuitOpenError("Circuit breaker is HALF_OPEN")
             assert self.opened_at is not None
             if monotonic() - self.opened_at >= self.recovery_timeout_sec:
                 self._transition(CircuitState.HALF_OPEN)

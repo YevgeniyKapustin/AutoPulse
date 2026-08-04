@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     enrichment_max_retries: int = 5
     enrichment_retry_base_delay_sec: float = 1.0
     enrichment_retry_max_delay_sec: float = 30.0
+    outbox_drain_interval_sec: float = 5.0
     shutdown_timeout_sec: float = 10.0
 
     @property

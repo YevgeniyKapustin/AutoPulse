@@ -29,15 +29,9 @@ class HeuristicOptionsExtractor:
     )
 
     def extract(self, listing: RawListing) -> ListingOptions:
-        text = " ".join(
-            part for part in (listing.title, listing.description) if part
-        )
-        packages = [
-            name for name, pat in self._PACKAGE_PATTERNS if pat.search(text)
-        ]
-        features = [
-            name for name, pat in self._FEATURE_PATTERNS if pat.search(text)
-        ]
+        text = " ".join(part for part in (listing.title, listing.description) if part)
+        packages = [name for name, pat in self._PACKAGE_PATTERNS if pat.search(text)]
+        features = [name for name, pat in self._FEATURE_PATTERNS if pat.search(text)]
         tags: list[str] = ["heuristic"]
         owner_count = 1 if self._OWNER_PATTERN.search(text) else None
         if owner_count == 1:

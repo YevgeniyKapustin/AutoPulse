@@ -21,7 +21,8 @@ uvicorn services.enrichment.app.main:app --reload --port 8001
 | `app/repositories/listing_repository.py` | Motor upsert/get |
 | `app/core/circuit_breaker.py` | External API breaker |
 
-## Next TODOs
+## Reliability notes
 
-Week 1 pipeline is implemented. Optional hardening: integration tests with
-testcontainers, real YOLO model swap-in for `CvService`.
+- Inbox: `processing` → `completed` (released on failure for TTL retries)
+- Outbox drain on enqueue + periodic ticker (`OUTBOX_DRAIN_INTERVAL_SEC`)
+- Partial LLM/CV progress is persisted per stage for resume
