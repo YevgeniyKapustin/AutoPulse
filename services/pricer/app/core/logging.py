@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from autopulse_shared.logging import LogLevel
 from autopulse_shared.logging import setup_logging as _setup_logging
 
 
 def setup_logging(
-    level: str = "INFO",
+    level: LogLevel | str = "INFO",
     *,
     service: str = "pricer",
     environment: str = "local",
 ) -> None:
+    """Configure JSON logging for the pricer process."""
     _setup_logging(level=level, service=service, environment=environment)

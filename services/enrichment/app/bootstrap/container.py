@@ -1,4 +1,4 @@
-"""Shared wiring for enrichment API and worker processes."""
+"""Composition root: wire repositories, orchestrator, and messaging."""
 
 from __future__ import annotations
 
@@ -47,6 +47,7 @@ class EnrichmentRuntime:
 
 
 async def build_runtime(settings: Settings) -> EnrichmentRuntime:
+    """Create Mongo repos, orchestrator, and messaging route table."""
     repository, mongo_client = ListingRepository.from_settings(
         settings.mongodb_uri,
         settings.mongodb_db,
@@ -86,7 +87,11 @@ async def build_runtime(settings: Settings) -> EnrichmentRuntime:
 
 
 async def attach_publisher(runtime: EnrichmentRuntime) -> None:
-    """API mode: publish/enqueue without consuming the work queue."""
+    """API mode: publish/enqueue without consuming the work queue.
+
+    Startup ``drain()`` is multi-replica safe: each outbox row is claimed
+    atomically (``pending`` → ``processing``) before publish.
+    """
     assert runtime._routes is not None
     connection = await connect_robust(runtime.settings)
     channel = await open_publisher_channel(connection)
@@ -101,6 +106,7 @@ async def attach_publisher(runtime: EnrichmentRuntime) -> None:
 
 
 async def start_consumer(runtime: EnrichmentRuntime) -> RawListingConsumer:
+    """Declare topology and begin consuming the enrichment work queue."""
     consumer = RawListingConsumer(
         runtime.settings,
         runtime.orchestrator,
@@ -113,6 +119,11 @@ async def start_consumer(runtime: EnrichmentRuntime) -> RawListingConsumer:
 
 
 async def shutdown_runtime(runtime: EnrichmentRuntime) -> None:
+    """Stop the consumer and close Rabbit/Mongo connections.
+
+    Consumer stop first so no new Mongo work remains; then Rabbit channels.
+    ``mongo_client.close()`` is sync (Motor) and only runs after that drain.
+    """
     if runtime.consumer is not None:
         await runtime.consumer.stop()
         runtime.consumer = None

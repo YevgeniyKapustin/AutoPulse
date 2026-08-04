@@ -3,16 +3,24 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+RunMode = Literal["api", "worker", "all"]
+LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+PricingEngineName = Literal["rules", "sklearn"]
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     pricer_host: str = "0.0.0.0"
     pricer_port: int = 8002
-    log_level: str = "INFO"
+    log_level: LogLevel = "INFO"
     environment: str = "local"
+    # Scraped on a dedicated port (not the public API). Disable via METRICS_ENABLED.
+    metrics_enabled: bool = True
+    metrics_host: str = "0.0.0.0"
+    metrics_port: int = 9092
     # api = HTTP only; worker = consumer only; all = both (local DX)
-    run_mode: Literal["api", "worker", "all"] = "all"
+    run_mode: RunMode = "all"
 
     rabbitmq_host: str = "localhost"
     rabbitmq_port: int = 5672
@@ -44,7 +52,7 @@ class Settings(BaseSettings):
 
     default_target_margin_pct: float = 12.0
     default_turnover_days: int = 21
-    pricing_engine: str = "rules"
+    pricing_engine: PricingEngineName = "rules"
 
     @property
     def rabbitmq_url(self) -> str:

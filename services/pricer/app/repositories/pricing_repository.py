@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +19,21 @@ from services.pricer.app.models.pricing import (
     PricingResultRow,
     ProcessedEventRow,
 )
+
+
+class PricingRowValues(TypedDict):
+    external_id: str
+    bid_price: float
+    recommended_dealer_bid: float
+    estimated_turnover_days: int
+    target_margin_pct: float
+    price_low: float
+    price_high: float
+    currency: str
+    model_version: str
+    meta_json: str
+    priced_at: datetime
+
 
 
 class PricingRepository:
@@ -109,7 +125,7 @@ class PricingRepository:
             return self._to_schema(row)
 
     @staticmethod
-    def _to_row_values(result: PricingResult) -> dict[str, object]:
+    def _to_row_values(result: PricingResult) -> PricingRowValues:
         priced_at = result.priced_at
         if priced_at.tzinfo is not None:
             priced_at = priced_at.astimezone(UTC).replace(tzinfo=None)

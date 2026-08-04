@@ -3,16 +3,24 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+RunMode = Literal["api", "worker", "all"]
+LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+LlmProvider = Literal["openai"]
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     enrichment_host: str = "0.0.0.0"
     enrichment_port: int = 8001
-    log_level: str = "INFO"
+    log_level: LogLevel = "INFO"
     environment: str = "local"
+    # Scraped on a dedicated port (not the public API). Disable via METRICS_ENABLED.
+    metrics_enabled: bool = True
+    metrics_host: str = "0.0.0.0"
+    metrics_port: int = 9091
     # api = HTTP + publisher; worker = consumer only; all = both (local DX)
-    run_mode: Literal["api", "worker", "all"] = "all"
+    run_mode: RunMode = "all"
 
     rabbitmq_host: str = "localhost"
     rabbitmq_port: int = 5672
@@ -39,7 +47,7 @@ class Settings(BaseSettings):
     mongodb_collection_inbox: str = "consumer_inbox"
     mongodb_collection_outbox: str = "publisher_outbox"
 
-    llm_provider: str = "openai"
+    llm_provider: LlmProvider = "openai"
     llm_model: str = "gpt-4o-mini"
     llm_api_key: str = ""
     llm_timeout_sec: int = 30

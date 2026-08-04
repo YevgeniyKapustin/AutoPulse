@@ -59,6 +59,16 @@ class EnrichedListingConsumer:
         self._consumer_tag: str | None = None
         self._stopping = False
 
+    @property
+    def is_ready(self) -> bool:
+        """True when the consumer connection and channel are open."""
+        return (
+            self._connection is not None
+            and not self._connection.is_closed
+            and self._channel is not None
+            and not self._channel.is_closed
+        )
+
     async def start(self) -> None:
         self._connection = await connect_robust(self._settings)
         self._channel = await self._connection.channel()

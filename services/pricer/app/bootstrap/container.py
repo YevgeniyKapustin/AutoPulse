@@ -1,4 +1,4 @@
-"""Shared wiring for pricer API and worker processes."""
+"""Composition root: wire MySQL, pricing service, and consumers."""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ class PricerRuntime:
 
 
 async def build_runtime(settings: Settings) -> PricerRuntime:
+    """Create MySQL engine, pricing service, and repository."""
     engine = create_engine(settings)
     if settings.auto_create_tables:
         await create_schema(engine)
@@ -46,6 +47,7 @@ async def build_runtime(settings: Settings) -> PricerRuntime:
 
 
 async def start_consumer(runtime: PricerRuntime) -> EnrichedListingConsumer:
+    """Declare topology and begin consuming the pricer work queue."""
     consumer = EnrichedListingConsumer(
         runtime.settings,
         runtime.pricing,
@@ -57,6 +59,7 @@ async def start_consumer(runtime: PricerRuntime) -> EnrichedListingConsumer:
 
 
 async def shutdown_runtime(runtime: PricerRuntime) -> None:
+    """Stop the consumer and dispose the SQLAlchemy engine."""
     if runtime.consumer is not None:
         await runtime.consumer.stop()
         runtime.consumer = None

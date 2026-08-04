@@ -2,80 +2,93 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI
 
+from autopulse_shared.metrics_http import MetricsHttpServer
+from services.enrichment.app.api.errors import register_exception_handlers
 from services.enrichment.app.api.health import router as health_router
 from services.enrichment.app.api.listings import router as listings_router
-from services.enrichment.app.core.config import get_settings
-from services.enrichment.app.core.logging import setup_logging
-from services.enrichment.app.core.metrics import METRICS
-from services.enrichment.app.core.middleware import RequestIdMiddleware
-from services.enrichment.app.runtime import (
-    attach_publisher,
+from services.enrichment.app.bootstrap import (
+    EnrichmentRuntime,
+    assert_uvicorn_run_mode,
+    attach_messaging_for_mode,
     build_runtime,
-    shutdown_runtime,
-    start_consumer,
+    drain_runtime_then_stop_metrics,
+    start_metrics_server,
 )
+from services.enrichment.app.core.config import Settings, get_settings
+from services.enrichment.app.core.logging import setup_logging
+from services.enrichment.app.core.middleware import RequestIdMiddleware
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    settings = get_settings()
-    setup_logging(
-        settings.log_level,
-        service="enrichment",
-        environment=settings.environment,
-    )
-    mode = settings.run_mode
-    if mode == "worker":
-        raise RuntimeError(
-            "RUN_MODE=worker requires services.enrichment.app.worker, not uvicorn"
+class EnrichmentApp:
+    """HTTP process for RUN_MODE=api|all (uvicorn entrypoint)."""
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._metrics: MetricsHttpServer | None = None
+        self._runtime: EnrichmentRuntime | None = None
+
+    def create(self) -> FastAPI:
+        """Build the FastAPI application with routers and middleware."""
+        application = FastAPI(
+            title="AutoPulse Enrichment",
+            version="0.1.0",
+            lifespan=self.lifespan,
         )
+        application.add_middleware(RequestIdMiddleware)
+        self._register_exception_handlers(application)
+        self._register_routers(application)
+        application.state.settings = self._settings
+        return application
 
-    runtime = await build_runtime(settings)
-    if mode == "api":
-        await attach_publisher(runtime)
-    elif mode == "all":
-        await start_consumer(runtime)
-    else:
-        raise RuntimeError(f"Unsupported RUN_MODE={mode!r} (use api|worker|all)")
+    def _register_exception_handlers(self, application: FastAPI) -> None:
+        """Map domain errors to HTTP responses."""
+        register_exception_handlers(application)
 
-    app.state.orchestrator = runtime.orchestrator
-    app.state.runtime = runtime
-    try:
-        yield
-    finally:
-        with suppress(asyncio.TimeoutError):
-            await asyncio.wait_for(
-                shutdown_runtime(runtime),
-                timeout=settings.shutdown_timeout_sec,
-            )
+    def _register_routers(self, application: FastAPI) -> None:
+        """Attach HTTP routers for health and listings."""
+        application.include_router(health_router)
+        application.include_router(listings_router, prefix="/api/v1")
+
+    @asynccontextmanager
+    async def lifespan(self, app: FastAPI) -> AsyncIterator[None]:
+        """Boot metrics, runtime, and messaging; drain in reverse on shutdown."""
+        await self._startup(app)
+        try:
+            yield
+        finally:
+            await self._shutdown()
+
+    async def _startup(self, app: FastAPI) -> None:
+        setup_logging(
+            self._settings.log_level,
+            service="enrichment",
+            environment=self._settings.environment,
+        )
+        assert_uvicorn_run_mode(self._settings)
+        self._metrics = await start_metrics_server(self._settings)
+        self._runtime = await build_runtime(self._settings)
+        await attach_messaging_for_mode(self._runtime, self._settings.run_mode)
+        app.state.orchestrator = self._runtime.orchestrator
+        app.state.runtime = self._runtime
+
+    async def _shutdown(self) -> None:
+        if self._runtime is None:
+            return
+        await drain_runtime_then_stop_metrics(
+            self._runtime,
+            self._metrics,
+            self._settings.shutdown_timeout_sec,
+        )
 
 
 def create_app() -> FastAPI:
-    settings = get_settings()
-    application = FastAPI(
-        title="AutoPulse Enrichment",
-        version="0.1.0",
-        lifespan=lifespan,
-    )
-    application.add_middleware(RequestIdMiddleware)
-    application.include_router(health_router)
-    application.include_router(listings_router, prefix="/api/v1")
-
-    @application.get("/metrics")
-    async def metrics() -> Response:
-        return Response(
-            content=METRICS.render_prometheus(),
-            media_type="text/plain; version=0.0.4",
-        )
-
-    application.state.settings = settings
-    return application
+    """Build the enrichment FastAPI application."""
+    return EnrichmentApp(get_settings()).create()
 
 
 app = create_app()

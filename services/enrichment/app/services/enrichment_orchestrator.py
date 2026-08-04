@@ -18,7 +18,10 @@ from autopulse_shared.schemas.listing import (
     ListingOptions,
     RawListing,
 )
-from services.enrichment.app.core.exceptions import EnrichmentError
+from services.enrichment.app.core.exceptions import (
+    EnrichmentError,
+    EnrichmentStage,
+)
 from services.enrichment.app.services.cv_service import CvService
 from services.enrichment.app.services.llm_service import LlmService
 
@@ -148,7 +151,7 @@ class EnrichmentOrchestrator:
         *,
         external_id: str,
         error: str,
-        stage: str | None,
+        stage: EnrichmentStage | str | None,
         event_id: str | None = None,
         request_id: str | None = None,
         retry_count: int = 0,
