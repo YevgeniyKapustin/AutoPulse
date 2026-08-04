@@ -58,33 +58,25 @@ class OutboxEventSink:
         await self._enqueue_and_drain(event, self._routes.enrichment_failed)
 
     async def drain(self, limit: int = 50) -> int:
-        """Claim pending outbox rows and publish them (multi-replica safe)."""
+        """Claim pending outbox rows and publish them (multi-replica safe).
+
+        Per-row publish failures release that claim and continue the batch so
+        other claimed rows are not left stuck in ``processing``.
+        """
         pending = await self._outbox.claim_pending(limit=limit)
         published = 0
         for doc in pending:
             outbox_id = str(doc["_id"])
             try:
-                body = doc["body"]
-                if isinstance(body, str):
-                    body = body.encode("utf-8")
-                elif not isinstance(body, (bytes, bytearray)):
-                    body = bytes(body)
-                raw_headers = doc.get("headers") or {}
-                headers = {
-                    str(key): str(value)
-                    for key, value in dict(raw_headers).items()
-                    if value is not None
-                }
-                await self._publisher.publish_raw_body(
-                    body,
-                    str(doc["routing_key"]),
-                    headers=headers,
-                )
+                await self._publish_claimed(doc)
                 await self._outbox.mark_published(outbox_id)
                 published += 1
             except Exception:
+                logger.exception(
+                    "Outbox publish failed outbox_id=%s; releasing claim",
+                    outbox_id,
+                )
                 await self._outbox.release_claim(outbox_id)
-                raise
         if published:
             logger.info("Drained enrichment outbox count=%s", published)
         return published
@@ -96,4 +88,30 @@ class OutboxEventSink:
             payload.body,
             dict(payload.headers),
         )
-        await self.drain()
+        # Durable write already succeeded; broker hiccups must not fail the
+        # business path — a later drain / replica will republish.
+        try:
+            await self.drain()
+        except Exception:
+            logger.exception(
+                "Outbox drain-after-enqueue failed routing_key=%s",
+                routing_key,
+            )
+
+    async def _publish_claimed(self, doc: OutboxPendingDoc) -> None:
+        body = doc["body"]
+        if isinstance(body, str):
+            body = body.encode("utf-8")
+        elif not isinstance(body, (bytes, bytearray)):
+            body = bytes(body)
+        raw_headers = doc.get("headers") or {}
+        headers = {
+            str(key): str(value)
+            for key, value in dict(raw_headers).items()
+            if value is not None
+        }
+        await self._publisher.publish_raw_body(
+            body,
+            str(doc["routing_key"]),
+            headers=headers,
+        )

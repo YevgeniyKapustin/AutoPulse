@@ -8,9 +8,19 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from autopulse_shared.schemas.events import RawListingEvent
+from autopulse_shared.schemas.listing import RawListing
 from services.enrichment.app.messaging.outbox_sink import OutboxEventSink
 from services.enrichment.app.messaging.routes import PublishRoutes
 from services.enrichment.app.repositories.messaging_store import OutboxPendingDoc
+
+
+def _routes() -> PublishRoutes:
+    return PublishRoutes(
+        raw_created="car.raw.created",
+        enriched_success="car.enriched.success",
+        enrichment_failed="car.enrichment.failed",
+    )
 
 
 class _MemoryOutbox:
@@ -69,15 +79,7 @@ async def test_drain_publishes_claimed_rows_only_once() -> None:
     await outbox.enqueue("car.raw.created", b"{}", {})
     publisher = AsyncMock()
     publisher.publish_raw_body = AsyncMock()
-    sink = OutboxEventSink(
-        PublishRoutes(
-            raw_created="car.raw.created",
-            enriched_success="car.enriched.success",
-            enrichment_failed="car.enrichment.failed",
-        ),
-        outbox,  # type: ignore[arg-type]
-        publisher,
-    )
+    sink = OutboxEventSink(_routes(), outbox, publisher)  # type: ignore[arg-type]
 
     assert await sink.drain() == 2
     assert publisher.publish_raw_body.await_count == 2
@@ -87,21 +89,31 @@ async def test_drain_publishes_claimed_rows_only_once() -> None:
 
 
 @pytest.mark.asyncio
-async def test_drain_releases_claim_on_publish_failure() -> None:
+async def test_drain_releases_claim_and_continues_batch() -> None:
     outbox = _MemoryOutbox()
-    await outbox.enqueue("car.raw.created", b"{}", {})
+    await outbox.enqueue("car.raw.created", b"one", {})
+    await outbox.enqueue("car.raw.created", b"two", {})
+    publisher = AsyncMock()
+    publisher.publish_raw_body = AsyncMock(
+        side_effect=[RuntimeError("broker down"), None],
+    )
+    sink = OutboxEventSink(_routes(), outbox, publisher)  # type: ignore[arg-type]
+
+    assert await sink.drain() == 1
+    assert outbox.docs["ob-1"]["status"] == "pending"
+    assert outbox.docs["ob-2"]["status"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_publish_survives_drain_failure_after_enqueue() -> None:
+    outbox = _MemoryOutbox()
     publisher = AsyncMock()
     publisher.publish_raw_body = AsyncMock(side_effect=RuntimeError("broker down"))
-    sink = OutboxEventSink(
-        PublishRoutes(
-            raw_created="car.raw.created",
-            enriched_success="car.enriched.success",
-            enrichment_failed="car.enrichment.failed",
-        ),
-        outbox,  # type: ignore[arg-type]
-        publisher,
-    )
+    sink = OutboxEventSink(_routes(), outbox, publisher)  # type: ignore[arg-type]
 
-    with pytest.raises(RuntimeError, match="broker down"):
-        await sink.drain()
-    assert outbox.docs["ob-1"]["status"] == "pending"
+    event = RawListingEvent(listing=RawListing(external_id="e1"))
+    await sink.publish_raw(event)
+
+    assert len(outbox.docs) == 1
+    row = next(iter(outbox.docs.values()))
+    assert row["status"] == "pending"
