@@ -22,16 +22,25 @@ repo root → `shared/`). That is correct for this layout.
 
 ## Local install
 
+Requires **Poetry 2.x** lockfiles (`metadata.lock-version` 2.*) and
+Python 3.12.x (`>=3.12,<3.14`). Docker / CI use the same Poetry 2 line.
+
 ```bash
-# Python 3.12.x (see python constraint >=3.12,<3.14)
 python scripts/poetry_install.py
 # or: make install
 ```
 
-This installs root tools + shared into `.venv`, then `pip install`s each
-service’s locked main deps into that same env (Poetry’s
-`virtualenvs.create=false` would otherwise target the base interpreter).
-Images stay isolated via per-service Docker builds.
+`scripts/poetry_install.py` runs root `poetry install` (dev tools + path
+`shared` only — no service libraries in root `pyproject.toml`), then a
+**single** `pip install -e shared …pins` so pip resolves shared’s PyPI deps
+against the merged service pins. It will:
+
+- refuse Poetry 1.x / empty-main locks;
+- skip packages whose environment markers do not match this host;
+- abort if enrichment and pricer pin different versions of the same package
+  (no silent overwrite).
+
+Images stay isolated via per-service Docker builds (not this script).
 
 ## Commands
 
@@ -44,6 +53,8 @@ poetry -C services/pricer run alembic -c alembic.ini upgrade head
 
 ## Docker
 
-Service Dockerfiles run `poetry install --only main --no-root` from the
-service directory (path dep on `../../shared`). Runtime stage copies the
-built `.venv` and drops Poetry/build tools.
+Service Dockerfiles use **Poetry 2.1.x** and run
+`poetry install --only main --no-root` from the service directory (path dep
+on `../../shared`). Runtime stage copies the built venv and drops
+Poetry/build tools. Keep service `poetry.lock` files on Poetry 2
+(`lock-version` 2.*) so local `poetry_install.py` and images stay aligned.
