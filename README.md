@@ -21,6 +21,7 @@ flowchart TD
 |---------|------|----------------|
 | `enrichment` | 8001 | LLM + CV enrichment, Mongo state, ack-on-aggregation |
 | `pricer` | 8002 | Margin rules, turnover estimate, MySQL persistence |
+| scrape `/metrics` | 9091 / 9092 | Prometheus text (not on the public API ports) |
 | RabbitMQ | 5672 / 15672 | Topic exchange `autopulse.cars` |
 | MongoDB | 27017 | Per-car enrichment state |
 | MySQL | 3306 | Structured pricing metrics |
@@ -34,8 +35,12 @@ docker compose up -d --build
 
 Uses `compose.yaml` + `compose.override.yaml` (host ports, bind mounts, reload).
 
-- Enrichment health: http://localhost:8001/health
-- Pricer health: http://localhost:8002/health
+- Enrichment health: http://localhost:8001/health/live
+- Enrichment ready: http://localhost:8001/health/ready
+- Pricer health: http://localhost:8002/health/live
+- Pricer ready: http://localhost:8002/health/ready
+- Enrichment metrics: http://localhost:9091/metrics
+- Pricer metrics: http://localhost:9092/metrics
 - RabbitMQ UI: http://localhost:15672 (`autopulse` / `autopulse`)
 
 Optional logs stack: `make up-observability` — see [docs/logging.md](docs/logging.md).

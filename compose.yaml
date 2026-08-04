@@ -73,6 +73,9 @@ services:
   enrichment:
     restart: unless-stopped
     stop_grace_period: 25s
+    # Scrape-only; not published to the host (see compose.override for local DX).
+    expose:
+      - "9091"
     environment:
       <<: *app-env
       ENVIRONMENT: ${ENVIRONMENT:-local}
@@ -91,7 +94,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/ready')",
         ]
       interval: 10s
       timeout: 3s
@@ -101,6 +104,9 @@ services:
   pricer:
     restart: unless-stopped
     stop_grace_period: 25s
+    # Scrape-only; not published to the host (see compose.override for local DX).
+    expose:
+      - "9092"
     environment:
       <<: *app-env
       ENVIRONMENT: ${ENVIRONMENT:-local}
@@ -119,7 +125,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health/ready')",
         ]
       interval: 10s
       timeout: 3s
@@ -190,6 +196,7 @@ services:
         condition: service_healthy
 
 networks:
+  # Shared by datastores, API, workers, and observability services.
   backend:
     driver: bridge
 

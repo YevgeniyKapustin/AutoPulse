@@ -8,6 +8,8 @@ FROM ${PYTHON_IMAGE} AS builder
 ARG POETRY_VERSION
 WORKDIR /build
 
+# Compiler toolchain for rare source builds of C-extensions. Prefer
+# manylinux wheels; add libffi-dev / libssl-dev only if a dep must compile.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential \
     && rm -rf /var/lib/apt/lists/* \
@@ -15,10 +17,13 @@ RUN apt-get update \
     && /opt/venv/bin/pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 
 # Fixed venv path so console-script shebangs survive COPY to runtime.
+# Keep Poetry's wheel cache off the default home path (saves CI disk).
 ENV VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH" \
     POETRY_VIRTUALENVS_CREATE=false \
-    POETRY_NO_INTERACTION=1
+    POETRY_NO_INTERACTION=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache \
+    PIP_NO_CACHE_DIR=1
 
 # Stub shared so Poetry can resolve the path dep without invalidating the
 # heavy install layer on every shared source change.
@@ -31,11 +36,12 @@ COPY services/enrichment/pyproject.toml services/enrichment/poetry.lock \
     /build/services/enrichment/
 
 WORKDIR /build/services/enrichment
-RUN poetry install --only main --no-root --no-ansi
+RUN poetry install --only main --no-root --no-ansi \
+    && rm -rf "${POETRY_CACHE_DIR}"
 
 # Real shared package into site-packages (only this layer rebuilds on shared edits).
 COPY shared /build/shared
-RUN pip install --no-cache-dir --force-reinstall --no-deps /build/shared
+RUN pip install --force-reinstall --no-deps /build/shared
 
 
 FROM ${PYTHON_IMAGE} AS runtime
@@ -61,9 +67,9 @@ COPY --chown=appuser:appuser services/enrichment /app/services/enrichment
 
 USER appuser
 
-EXPOSE 8001
+EXPOSE 8001 9091
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/live')"
 
 CMD ["python", "-m", "uvicorn", "services.enrichment.app.main:app", "--host", "0.0.0.0", "--port", "8001"]

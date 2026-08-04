@@ -10,11 +10,11 @@
 | Prefetch limits | Done |
 | ACK after side effect | Done |
 | Idempotent inbox (`event_id`) | Done |
-| Transactional outbox | Done (Mongo enrichment, MySQL pricer) |
+| Transactional outbox | Done (Mongo enrichment w/ claim, MySQL pricer) |
 | Retry backoff + DLQ | Done |
 | Graceful shutdown < grace period | Done (`SHUTDOWN_TIMEOUT_SEC` / 25s) |
 | Payload validation + `schema_version` | Done |
-| Trace headers + `/metrics` + JSON logs | Done |
+| Trace headers + scrape `/metrics` + JSON logs | Done (`:9091` / `:9092`) |
 | Integration tests (topology + reconnect) | Done |
 
 **Note:** switching an existing classic queue to quorum requires deleting the

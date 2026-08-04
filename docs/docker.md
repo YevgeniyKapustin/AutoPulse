@@ -29,6 +29,13 @@ Datastore bootstrap on the host:
 | Local | `${RABBITMQ_USER:-autopulse}` (and friends) — weak defaults OK |
 | Prod | `${RABBITMQ_USER:?…}` — missing/empty fails compose parse |
 
+Observability (`CLICKHOUSE_*`, `GRAFANA_*`) follows the same rule: weak
+defaults in `compose.yaml`, `${VAR:?…}` in `compose.prod.yaml`.
+
+All services (API, workers, Rabbit/Mongo/MySQL, ClickHouse/Vector/Grafana)
+join the `backend` network declared in `compose.yaml`. Migrations stay a
+one-off (`make migrate-docker`), not a `depends_on` gate on API startup.
+
 ## Process model (`RUN_MODE`)
 
 | Value | Process | Use |
@@ -36,6 +43,31 @@ Datastore bootstrap on the host:
 | `all` | HTTP + consumer in one process | Local DX (default) |
 | `api` | HTTP (+ publisher for enrichment) | Prod API containers |
 | `worker` | Consumer only (`python -m …worker`) | Prod worker containers |
+
+## Health probes
+
+| Probe | Path | Meaning | Restart? |
+|-------|------|---------|----------|
+| Liveness | `/health/live` | Process is up | Yes (Dockerfile `HEALTHCHECK`) |
+| Readiness | `/health/ready` | Deps OK (Mongo/MySQL + Rabbit when used) | No — LB drops traffic (`503`) |
+
+Compose service healthchecks use `/health/ready` so `depends_on` waits for
+backing services, not just a listening port.
+
+## Metrics scrape ports
+
+Prometheus text lives on a dedicated port (not the public API):
+
+| Service | Port | Dockerfile | Compose |
+|---------|------|------------|---------|
+| enrichment (+ worker) | `9091` | `EXPOSE 8001 9091` | `expose: ["9091"]` |
+| pricer (+ worker) | `9092` | `EXPOSE 8002 9092` | `expose: ["9092"]` |
+
+`expose` keeps the port on the `backend` network only. Host publish is
+local-only via `compose.override.yaml` (`127.0.0.1:9091/9092`). Scrape
+`http://enrichment:9091/metrics` / `http://pricer:9092/metrics` from
+another `backend` container. Shutdown stops the scrape server **after**
+runtime drain so late scrapes still see final counters.
 
 ## Local
 
@@ -99,7 +131,7 @@ docker compose run --rm --entrypoint "" pricer \
 | IV | Backing services | Rabbit/Mongo/MySQL via env URLs/hosts |
 | V | Build, release, run | Multi-stage build; CI pushes `TAG` digests to GHCR |
 | VI | Processes | Stateless apps; API vs worker split in prod |
-| VII | Port binding | Uvicorn binds `0.0.0.0:8001/8002` |
+| VII | Port binding | Uvicorn binds `0.0.0.0:8001/8002`; scrape metrics on `9091/9092` |
 | VIII | Concurrency | Scale API and worker replicas independently |
 | IX | Disposability | Fast health; graceful stop < `stop_grace_period` |
 | X | Dev/prod parity | Same Dockerfiles; override only for local ports/reload |

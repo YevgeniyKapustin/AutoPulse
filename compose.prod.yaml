@@ -6,11 +6,15 @@
 #   # host shell must also set datastore bootstrap secrets (no weak defaults):
 #   export RABBITMQ_USER=... RABBITMQ_PASSWORD=...
 #   export MYSQL_ROOT_PASSWORD=... MYSQL_USER=... MYSQL_PASSWORD=... MYSQL_DATABASE=...
+#   # observability profile also needs:
+#   export CLICKHOUSE_USER=... CLICKHOUSE_PASSWORD=...
+#   export GRAFANA_ADMIN_USER=... GRAFANA_ADMIN_PASSWORD=...
 #   docker compose -f compose.yaml -f compose.prod.yaml pull
-#   docker compose -f compose.yaml -f compose.prod.yaml up -d
+#   docker compose -f compose.yaml -f compose.prod.yaml --profile observability up -d
 #
-# App secrets come from required env_file paths. Datastore bootstrap vars
-# interpolate from the host shell — missing/empty values fail compose parse.
+# App secrets come from required env_file paths. Datastore / observability
+# bootstrap vars interpolate from the host shell — missing/empty values fail
+# compose parse. All app services join the base `backend` network.
 
 x-app-env: &app-env
   RABBITMQ_HOST: rabbitmq
@@ -54,6 +58,8 @@ services:
   enrichment:
     image: ghcr.io/yevgeniykapustin/autopulse-enrichment:${TAG:?set TAG to git sha or semver}
     pull_policy: always
+    expose:
+      - "9091"
     environment:
       <<: *app-env
       RUN_MODE: api
@@ -64,6 +70,12 @@ services:
     env_file:
       - path: ${ENRICHMENT_ENV_FILE:?set ENRICHMENT_ENV_FILE}
         required: true
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -76,6 +88,8 @@ services:
     pull_policy: always
     restart: unless-stopped
     stop_grace_period: 25s
+    expose:
+      - "9091"
     environment:
       <<: *app-env
       RUN_MODE: worker
@@ -111,6 +125,8 @@ services:
   pricer:
     image: ghcr.io/yevgeniykapustin/autopulse-pricer:${TAG:?set TAG to git sha or semver}
     pull_policy: always
+    expose:
+      - "9092"
     environment:
       <<: *app-env
       RUN_MODE: api
@@ -121,6 +137,12 @@ services:
     env_file:
       - path: ${PRICER_ENV_FILE:?set PRICER_ENV_FILE}
         required: true
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -133,6 +155,8 @@ services:
     pull_policy: always
     restart: unless-stopped
     stop_grace_period: 25s
+    expose:
+      - "9092"
     environment:
       <<: *app-env
       RUN_MODE: worker
@@ -171,6 +195,7 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    networks: [backend]
     logging: *json-log
 
   vector:
@@ -179,6 +204,10 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
       AUTOPULSE_ENVIRONMENT: ${ENVIRONMENT:-production}
+    networks: [backend]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
     logging: *json-log
 
   grafana:
@@ -188,4 +217,8 @@ services:
       GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
+    networks: [backend]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
     logging: *json-log
