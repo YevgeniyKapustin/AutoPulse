@@ -14,7 +14,7 @@ uvicorn services.enrichment.app.main:app --reload --port 8001
 | Module | Role |
 |--------|------|
 | `app/consumers/raw_listing_consumer.py` | aio_pika + DLQ retries |
-| `app/messaging/` | Topology + event publisher |
+| `app/messaging/` | Topology (work + TTL retry + DLQ) + publisher |
 | `app/enrichment/` | Aggregation orchestrator |
 | `app/llm/` | Heuristic + OpenAI option extraction |
 | `app/cv/` | Image fetch + Pillow heuristics |

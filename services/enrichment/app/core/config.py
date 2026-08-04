@@ -38,8 +38,10 @@ class Settings(BaseSettings):
     routing_key_enriched_success: str = "car.enriched.success"
     routing_key_enrichment_failed: str = "car.enrichment.failed"
     routing_key_enrichment_dlq: str = "car.enrichment.dlq"
+    routing_key_enrichment_retry: str = "car.enrichment.retry"
     enrichment_queue_name: str = "enrichment.raw"
     enrichment_dlq_name: str = "enrichment.dlq"
+    enrichment_retry_queue_name: str = "enrichment.retry"
 
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_db: str = "autopulse"

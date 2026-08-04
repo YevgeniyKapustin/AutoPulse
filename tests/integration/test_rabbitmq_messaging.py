@@ -33,6 +33,7 @@ def _settings(rabbit: RabbitMqContainer) -> EnrichmentSettings:
         rabbitmq_quorum_queues=True,
         enrichment_queue_name="enrichment.raw.test",
         enrichment_dlq_name="enrichment.dlq.test",
+        enrichment_retry_queue_name="enrichment.retry.test",
         rabbitmq_connection_name="autopulse-it",
         rabbitmq_heartbeat_sec=10,
     )
@@ -45,9 +46,9 @@ async def test_rabbitmq_publish_and_consume_raw_queue() -> None:
         connection = await connect_robust(settings)
         try:
             channel = await open_publisher_channel(connection)
-            exchange, queue, _dlq = await declare_topology(channel, settings)
+            topology = await declare_topology(channel, settings)
             body = json.dumps({"hello": "world"}).encode("utf-8")
-            confirmation = await exchange.publish(
+            confirmation = await topology.exchange.publish(
                 aio_pika.Message(
                     body=body,
                     delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
@@ -59,7 +60,7 @@ async def test_rabbitmq_publish_and_consume_raw_queue() -> None:
             assert confirmation is not None
 
             async def wait_message() -> bytes:
-                incoming = await queue.get(fail=False, timeout=10)
+                incoming = await topology.work_queue.get(fail=False, timeout=10)
                 assert incoming is not None
                 async with incoming.process():
                     return incoming.body

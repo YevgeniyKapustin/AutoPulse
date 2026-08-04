@@ -12,8 +12,14 @@ from services.enrichment.app.consumers.raw_listing_consumer import RawListingCon
 from services.enrichment.app.core.circuit_breaker import CircuitBreaker
 from services.enrichment.app.core.config import Settings
 from services.enrichment.app.core.metrics import METRICS
+from services.enrichment.app.cv import CvService
+from services.enrichment.app.enrichment.orchestrator import (
+    EnrichmentOrchestrator,
+)
+from services.enrichment.app.llm import LlmService
 from services.enrichment.app.messaging.outbox_sink import OutboxEventSink
 from services.enrichment.app.messaging.publisher import EventPublisher
+from services.enrichment.app.messaging.retry import EnrichmentRetryPublisher
 from services.enrichment.app.messaging.routes import PublishRoutes
 from services.enrichment.app.messaging.topology import (
     connect_robust,
@@ -25,11 +31,6 @@ from services.enrichment.app.repositories.messaging_store import (
     InboxRepository,
     OutboxRepository,
 )
-from services.enrichment.app.cv import CvService
-from services.enrichment.app.enrichment.orchestrator import (
-    EnrichmentOrchestrator,
-)
-from services.enrichment.app.llm import LlmService
 
 
 @dataclass
@@ -43,6 +44,7 @@ class EnrichmentRuntime:
     consumer: RawListingConsumer | None = None
     publisher_connection: AbstractRobustConnection | None = None
     publisher_channel: AbstractChannel | None = None
+    retry_publisher: EnrichmentRetryPublisher | None = None
     _routes: PublishRoutes | None = field(default=None, repr=False)
 
 
@@ -87,33 +89,57 @@ async def build_runtime(settings: Settings) -> EnrichmentRuntime:
 
 
 async def attach_publisher(runtime: EnrichmentRuntime) -> None:
-    """API mode: publish/enqueue without consuming the work queue.
+    """Wire Rabbit publisher + outbox sink onto the orchestrator.
 
-    Startup ``drain()`` is multi-replica safe: each outbox row is claimed
-    atomically (``pending`` → ``processing``) before publish.
+    Idempotent for the happy path: closes a prior publisher connection first
+    so reconnect/restart does not leak channels.
     """
     assert runtime._routes is not None
+    await _close_publisher(runtime)
+
     connection = await connect_robust(runtime.settings)
     channel = await open_publisher_channel(connection)
-    await declare_topology(channel, runtime.settings)
-    exchange = await channel.get_exchange(runtime.settings.rabbitmq_exchange)
-    publisher = EventPublisher(exchange, runtime._routes, metrics=METRICS)
+    topology = await declare_topology(channel, runtime.settings)
+    publisher = EventPublisher(topology.exchange, runtime._routes, metrics=METRICS)
     sink = OutboxEventSink(runtime._routes, runtime.outbox, publisher)
     runtime.orchestrator.set_publisher(sink)
     await sink.drain()
     runtime.publisher_connection = connection
     runtime.publisher_channel = channel
+    runtime.retry_publisher = EnrichmentRetryPublisher(
+        topology.exchange,
+        runtime.settings,
+        metrics=METRICS,
+    )
 
 
 async def start_consumer(runtime: EnrichmentRuntime) -> RawListingConsumer:
-    """Declare topology and begin consuming the enrichment work queue."""
+    """Attach messaging if needed, then consume the enrichment work queue.
+
+    Opens a dedicated consume channel and transfers ownership to
+    ``RawListingConsumer.start`` (closed on ``stop``).
+    """
+    if runtime.publisher_connection is None:
+        await attach_publisher(runtime)
+    assert runtime.publisher_connection is not None
+    assert runtime.retry_publisher is not None
+
+    # Close a previous consume channel before opening another (no zombie chans).
+    if runtime.consumer is not None:
+        await runtime.consumer.stop()
+        runtime.consumer = None
+
+    channel = await runtime.publisher_connection.channel()
+    await channel.set_qos(prefetch_count=runtime.settings.rabbitmq_prefetch)
+    topology = await declare_topology(channel, runtime.settings)
+
     consumer = RawListingConsumer(
         runtime.settings,
         runtime.orchestrator,
+        runtime.retry_publisher,
         inbox=runtime.inbox,
-        outbox=runtime.outbox,
     )
-    await consumer.start()
+    await consumer.start(channel=channel, queue=topology.work_queue)
     runtime.consumer = consumer
     return consumer
 
@@ -127,13 +153,18 @@ async def shutdown_runtime(runtime: EnrichmentRuntime) -> None:
     if runtime.consumer is not None:
         await runtime.consumer.stop()
         runtime.consumer = None
+    await _close_publisher(runtime)
+    await runtime.orchestrator.aclose()
+    runtime.mongo_client.close()
+
+
+async def _close_publisher(runtime: EnrichmentRuntime) -> None:
+    runtime.retry_publisher = None
     channel = runtime.publisher_channel
     if channel is not None and not channel.is_closed:
         await channel.close()
-        runtime.publisher_channel = None
+    runtime.publisher_channel = None
     connection = runtime.publisher_connection
     if connection is not None and not connection.is_closed:
         await connection.close()
-        runtime.publisher_connection = None
-    await runtime.orchestrator.aclose()
-    runtime.mongo_client.close()
+    runtime.publisher_connection = None

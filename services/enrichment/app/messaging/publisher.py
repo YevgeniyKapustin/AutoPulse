@@ -16,6 +16,7 @@ from autopulse_shared.schemas.events import (
     RawListingEvent,
 )
 from services.enrichment.app.core.metrics import METRICS, MetricsRecorder
+from services.enrichment.app.messaging.constants import CONTENT_TYPE_JSON
 from services.enrichment.app.messaging.event_message import serialize_event
 from services.enrichment.app.messaging.routes import PublishRoutes
 
@@ -73,7 +74,7 @@ class EventPublisher:
         message = aio_pika.Message(
             body=body,
             delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-            content_type="application/json",
+            content_type=CONTENT_TYPE_JSON,
             headers=cast(Any, headers) if headers else None,
         )
         await self._deliver(message, routing_key)

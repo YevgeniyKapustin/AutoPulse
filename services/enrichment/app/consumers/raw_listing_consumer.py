@@ -1,38 +1,33 @@
 """RabbitMQ consumer for car.raw.created.
 
-Ack only after full aggregation and outbox drain.
+Ack only after full aggregation and outbox drain. Retries use a TTL queue
+(no in-process sleep on the consume loop).
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from typing import Protocol
 
-import aio_pika
-from aio_pika.abc import (
-    AbstractChannel,
-    AbstractIncomingMessage,
-    AbstractQueue,
-    AbstractRobustConnection,
-)
+from aio_pika.abc import AbstractChannel, AbstractIncomingMessage, AbstractQueue
 
 from autopulse_shared.logging import bind_trace_context, clear_contextvars
 from autopulse_shared.schemas.events import RawListingEvent
 from services.enrichment.app.core.config import Settings
 from services.enrichment.app.core.metrics import METRICS
-from services.enrichment.app.messaging.outbox_sink import OutboxEventSink
-from services.enrichment.app.messaging.publisher import EventPublisher
-from services.enrichment.app.messaging.routes import PublishRoutes
-from services.enrichment.app.messaging.topology import (
-    connect_robust,
-    declare_topology,
-    open_publisher_channel,
+from services.enrichment.app.enrichment.orchestrator import EnrichmentOrchestrator
+from services.enrichment.app.messaging.constants import (
+    HEADER_RETRY_COUNT,
+    METRIC_CONSUMER_ACK,
+    METRIC_CONSUMER_DUPLICATES,
+    METRIC_CONSUMER_ERRORS,
+    METRIC_DLQ,
+    UNKNOWN_EXTERNAL_ID,
 )
-from services.enrichment.app.repositories.messaging_store import OutboxRepository
-from services.enrichment.app.enrichment.orchestrator import (
-    EnrichmentOrchestrator,
+from services.enrichment.app.messaging.retry import (
+    EnrichmentRetryPublisher,
+    retry_delay_sec,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,64 +37,48 @@ class InboxClaimer(Protocol):
     async def try_claim(self, event_id: str) -> bool: ...
 
 
-def retry_delay_sec(retry_count: int, base: float, cap: float) -> float:
-    return float(min(cap, base * (2 ** max(retry_count - 1, 0))))
-
-
 class RawListingConsumer:
     def __init__(
         self,
         settings: Settings,
         orchestrator: EnrichmentOrchestrator,
+        retry_publisher: EnrichmentRetryPublisher,
         *,
         inbox: InboxClaimer | None = None,
-        outbox: OutboxRepository | None = None,
     ) -> None:
         self._settings = settings
         self._orchestrator = orchestrator
+        self._retry_publisher = retry_publisher
         self._inbox = inbox
-        self._outbox = outbox
-        self._outbox_sink: OutboxEventSink | None = None
-        self._connection: AbstractRobustConnection | None = None
         self._channel: AbstractChannel | None = None
-        self._pub_channel: AbstractChannel | None = None
         self._queue: AbstractQueue | None = None
         self._consumer_tag: str | None = None
         self._stopping = False
 
     @property
     def is_ready(self) -> bool:
-        """True when the consumer connection and channel are open."""
+        """True when the consumer channel is open and bound."""
         return (
-            self._connection is not None
-            and not self._connection.is_closed
-            and self._channel is not None
+            self._channel is not None
             and not self._channel.is_closed
+            and self._queue is not None
+            and self._consumer_tag is not None
         )
 
-    async def start(self) -> None:
-        self._connection = await connect_robust(self._settings)
-        self._channel = await self._connection.channel()
-        await self._channel.set_qos(prefetch_count=self._settings.rabbitmq_prefetch)
-        await declare_topology(self._channel, self._settings)
-        self._pub_channel = await open_publisher_channel(self._connection)
-        pub_exchange = await self._pub_channel.get_exchange(
-            self._settings.rabbitmq_exchange
-        )
-        routes = PublishRoutes(
-            raw_created=self._settings.routing_key_raw_created,
-            enriched_success=self._settings.routing_key_enriched_success,
-            enrichment_failed=self._settings.routing_key_enrichment_failed,
-        )
-        publisher = EventPublisher(pub_exchange, routes, metrics=METRICS)
-        if self._outbox is not None:
-            self._outbox_sink = OutboxEventSink(routes, self._outbox, publisher)
-            self._orchestrator.set_publisher(self._outbox_sink)
-            await self._outbox_sink.drain()
-        else:
-            self._orchestrator.set_publisher(publisher)
+    async def start(
+        self,
+        *,
+        channel: AbstractChannel,
+        queue: AbstractQueue,
+    ) -> None:
+        """Begin consuming; takes ownership of ``channel`` until ``stop()``.
 
-        _exchange, queue, _dlq = await declare_topology(self._channel, self._settings)
+        Callers must not reuse ``channel`` after ``stop()`` (or after a
+        subsequent ``start()``, which closes the previous channel).
+        """
+        await self._release_consume_resources()
+        self._stopping = False
+        self._channel = channel
         self._queue = queue
         self._consumer_tag = await queue.consume(self._on_message)
         logger.info(
@@ -110,54 +89,8 @@ class RawListingConsumer:
 
     async def stop(self) -> None:
         self._stopping = True
-        try:
-            if self._queue is not None and self._consumer_tag is not None:
-                await self._queue.cancel(self._consumer_tag)
-        finally:
-            self._consumer_tag = None
-            self._queue = None
-            try:
-                if self._pub_channel is not None and not self._pub_channel.is_closed:
-                    await self._pub_channel.close()
-            finally:
-                self._pub_channel = None
-                try:
-                    if self._channel is not None and not self._channel.is_closed:
-                        await self._channel.close()
-                finally:
-                    self._channel = None
-                    if self._connection is not None and not self._connection.is_closed:
-                        await self._connection.close()
-                    self._connection = None
-                    logger.info("RawListingConsumer stopped")
-
-    async def _on_message(self, message: AbstractIncomingMessage) -> None:
-        if self._stopping:
-            await message.nack(requeue=True)
-            return
-        try:
-            await self.handle_message(message.body)
-        except Exception as exc:
-            logger.exception("Enrichment handler failed: %s", exc)
-            METRICS.inc("autopulse_consumer_errors_total", service="enrichment")
-            retry_count = self._read_retry_count(message)
-            next_retry = retry_count + 1
-            if next_retry < self._settings.enrichment_max_retries:
-                delay = retry_delay_sec(
-                    next_retry,
-                    self._settings.enrichment_retry_base_delay_sec,
-                    self._settings.enrichment_retry_max_delay_sec,
-                )
-                await asyncio.sleep(delay)
-                await self._requeue_with_retry(message, next_retry)
-                await message.ack()
-                return
-            await self._handle_exhausted(message, next_retry, exc)
-            await message.reject(requeue=False)
-            METRICS.inc("autopulse_dlq_total", service="enrichment")
-            return
-        await message.ack()
-        METRICS.inc("autopulse_consumer_ack_total", service="enrichment")
+        await self._release_consume_resources()
+        logger.info("RawListingConsumer stopped")
 
     async def handle_message(self, body: bytes) -> None:
         event = RawListingEvent.model_validate_json(body)
@@ -180,10 +113,7 @@ class RawListingConsumer:
                         "request_id": event.request_id,
                     },
                 )
-                METRICS.inc(
-                    "autopulse_consumer_duplicates_total",
-                    service="enrichment",
-                )
+                METRICS.inc(METRIC_CONSUMER_DUPLICATES, service="enrichment")
                 return
             await self._orchestrator.enrich(
                 event.listing,
@@ -194,10 +124,38 @@ class RawListingConsumer:
         finally:
             clear_contextvars()
 
-    async def _requeue_with_retry(
+    async def _on_message(self, message: AbstractIncomingMessage) -> None:
+        if self._stopping:
+            await message.nack(requeue=True)
+            return
+        try:
+            await self.handle_message(message.body)
+        except Exception as exc:
+            logger.exception("Enrichment handler failed: %s", exc)
+            METRICS.inc(METRIC_CONSUMER_ERRORS, service="enrichment")
+            retry_count = self._read_retry_count(message)
+            next_retry = retry_count + 1
+            if next_retry < self._settings.enrichment_max_retries:
+                delay = retry_delay_sec(
+                    next_retry,
+                    self._settings.enrichment_retry_base_delay_sec,
+                    self._settings.enrichment_retry_max_delay_sec,
+                )
+                await self._schedule_retry(message, next_retry, delay)
+                await message.ack()
+                return
+            await self._handle_exhausted(message, next_retry, exc)
+            await message.reject(requeue=False)
+            METRICS.inc(METRIC_DLQ, service="enrichment")
+            return
+        await message.ack()
+        METRICS.inc(METRIC_CONSUMER_ACK, service="enrichment")
+
+    async def _schedule_retry(
         self,
         message: AbstractIncomingMessage,
         retry_count: int,
+        delay_sec: float,
     ) -> None:
         try:
             event = RawListingEvent.model_validate_json(message.body)
@@ -205,21 +163,11 @@ class RawListingConsumer:
             body = event.model_dump_json().encode("utf-8")
         except Exception:
             body = message.body
-        assert self._pub_channel is not None
-        exchange = await self._pub_channel.get_exchange(
-            self._settings.rabbitmq_exchange
+        await self._retry_publisher.publish_retry(
+            body,
+            retry_count=retry_count,
+            delay_sec=delay_sec,
         )
-        await exchange.publish(
-            aio_pika.Message(
-                body=body,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                content_type="application/json",
-                headers={"retry_count": retry_count},
-            ),
-            routing_key=self._settings.routing_key_raw_created,
-            mandatory=True,
-        )
-        logger.warning("Requeued enrichment retry_count=%s", retry_count)
 
     async def _handle_exhausted(
         self,
@@ -227,7 +175,7 @@ class RawListingConsumer:
         retry_count: int,
         exc: Exception,
     ) -> None:
-        external_id = "unknown"
+        external_id = UNKNOWN_EXTERNAL_ID
         stage = getattr(exc, "stage", None)
         error = str(exc) or "enrichment failed after max retries"
         event_id = str(uuid.uuid4())
@@ -254,10 +202,22 @@ class RawListingConsumer:
             extra={"event_id": event_id, "request_id": request_id},
         )
 
+    async def _release_consume_resources(self) -> None:
+        try:
+            if self._queue is not None and self._consumer_tag is not None:
+                await self._queue.cancel(self._consumer_tag)
+        finally:
+            self._consumer_tag = None
+            self._queue = None
+            channel = self._channel
+            self._channel = None
+            if channel is not None and not channel.is_closed:
+                await channel.close()
+
     @staticmethod
     def _read_retry_count(message: AbstractIncomingMessage) -> int:
         headers = message.headers or {}
-        header_count = headers.get("retry_count")
+        header_count = headers.get(HEADER_RETRY_COUNT)
         if isinstance(header_count, int):
             return header_count
         try:
