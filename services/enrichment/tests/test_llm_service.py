@@ -34,7 +34,7 @@ async def test_heuristic_extracts_m_sport_and_panorama() -> None:
 async def test_heuristic_bypasses_open_circuit() -> None:
     settings = Settings(llm_api_key="")
     breaker = CircuitBreaker(failure_threshold=1, recovery_timeout_sec=60)
-    breaker.record_failure()
+    await breaker.record_failure()
     async with LlmService(settings, breaker=breaker) as llm:
         options = await llm.extract_options(
             RawListing(external_id="x2", description="leather seats"),
@@ -47,7 +47,7 @@ async def test_heuristic_bypasses_open_circuit() -> None:
 async def test_circuit_opens_and_blocks_api_path() -> None:
     settings = Settings(llm_api_key="sk-test")
     breaker = CircuitBreaker(failure_threshold=1, recovery_timeout_sec=60)
-    breaker.record_failure()
+    await breaker.record_failure()
     async with LlmService(settings, breaker=breaker) as llm:
         with pytest.raises(CircuitOpenError):
             await llm.extract_options(RawListing(external_id="x3", description="x"))

@@ -38,6 +38,7 @@ class LlmService:
         self._breaker = breaker or CircuitBreaker(
             failure_threshold=settings.llm_max_retries + 2,
             recovery_timeout_sec=30.0,
+            name="llm",
         )
         self._owns_http = http_client is None
         self._http = http_client or httpx.AsyncClient(
@@ -67,28 +68,28 @@ class LlmService:
 
     async def extract_options(self, listing: RawListing) -> ListingOptions:
         # Local heuristic is not an external dependency — skip the breaker.
-        if not self._settings.llm_api_key:
+        if not self._settings.llm_api_key.get_secret_value():
             return self._heuristic.extract(listing)
 
-        self._breaker.before_call()
+        await self._breaker.before_call()
         try:
             options = await self._openai.extract(listing)
         except _NETWORK_ERRORS as exc:
-            self._breaker.record_failure()
+            await self._breaker.record_failure()
             raise EnrichmentError(
                 f"LLM API network error: {exc}",
                 stage="llm",
             ) from exc
         except _PARSE_ERRORS as exc:
             # Transport succeeded; do not punish the circuit for bad payloads.
-            self._breaker.record_success()
+            await self._breaker.record_success()
             raise EnrichmentError(
                 f"LLM parsing error: {exc}",
                 stage="llm",
             ) from exc
         except Exception as exc:
-            self._breaker.record_failure()
+            await self._breaker.record_failure()
             raise EnrichmentError(str(exc), stage="llm") from exc
         else:
-            self._breaker.record_success()
+            await self._breaker.record_success()
             return options

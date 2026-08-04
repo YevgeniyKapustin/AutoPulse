@@ -1,3 +1,5 @@
+import pytest
+
 from services.enrichment.app.core.circuit_breaker import (
     CircuitBreaker,
     CircuitOpenError,
@@ -5,20 +7,27 @@ from services.enrichment.app.core.circuit_breaker import (
 )
 
 
-def test_circuit_opens_after_threshold() -> None:
+@pytest.mark.asyncio
+async def test_circuit_opens_after_threshold() -> None:
     breaker = CircuitBreaker(failure_threshold=2, recovery_timeout_sec=60)
-    breaker.record_failure()
+    await breaker.record_failure()
     assert breaker.state == CircuitState.CLOSED
-    breaker.record_failure()
+    await breaker.record_failure()
     assert breaker.state == CircuitState.OPEN
 
 
-def test_open_circuit_raises() -> None:
+@pytest.mark.asyncio
+async def test_open_circuit_raises() -> None:
     breaker = CircuitBreaker(failure_threshold=1, recovery_timeout_sec=60)
-    breaker.record_failure()
-    try:
-        breaker.before_call()
-        raised = False
-    except CircuitOpenError:
-        raised = True
-    assert raised
+    await breaker.record_failure()
+    with pytest.raises(CircuitOpenError):
+        await breaker.before_call()
+
+
+@pytest.mark.asyncio
+async def test_open_recovers_to_half_open() -> None:
+    breaker = CircuitBreaker(failure_threshold=1, recovery_timeout_sec=0)
+    await breaker.record_failure()
+    assert breaker.state == CircuitState.OPEN
+    await breaker.before_call()
+    assert breaker.state == CircuitState.HALF_OPEN
