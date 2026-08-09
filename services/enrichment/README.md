@@ -17,7 +17,7 @@ uvicorn services.enrichment.app.main:app --reload --port 8001
 | `app/messaging/` | Topology (work + TTL retry + DLQ) + publisher |
 | `app/enrichment/` | Aggregation orchestrator |
 | `app/llm/` | Heuristic + OpenAI option extraction |
-| `app/cv/` | Image fetch + Pillow heuristics |
+| `app/cv/` | Image fetch + brightness + plate/scene-text ONNX |
 | `app/repositories/listing_repository.py` | Motor upsert/get |
 | `app/core/circuit_breaker.py` | External API breaker |
 
@@ -26,3 +26,33 @@ uvicorn services.enrichment.app.main:app --reload --port 8001
 - Inbox: `processing` → `completed` (released on failure for TTL retries)
 - Outbox drain on enqueue + periodic ticker (`OUTBOX_DRAIN_INTERVAL_SEC`)
 - Partial LLM/CV progress is persisted per stage for resume
+
+## Ops dashboard
+
+Local-only admin UI (no auth):
+
+- UI: `http://127.0.0.1:8001/admin`
+- JSON: `/api/v1/admin/overview`, `/api/v1/admin/listings`, …
+- Re-enrich: `POST /api/v1/admin/listings/{external_id}/re-enrich`
+
+Disable with `ADMIN_UI_ENABLED=false`. Queue depths come from RabbitMQ
+Management (`RABBITMQ_MANAGEMENT_URL`). Do not expose `/admin` publicly.
+
+## CV models
+
+Plate + watermark detection use pretrained YOLO ONNX models under
+`services/enrichment/models/`:
+
+- plate: `joker5914/yolov8n-license-plate` → `license_plate_detected`
+- watermark: `RyanBours/yolo11n-text` (scene text) + overlay scoring →
+  `watermark_suspected`
+
+Docker builds download both. With `compose.override` bind-mounts, run on
+the host once:
+
+```bash
+python services/enrichment/scripts/download_cv_models.py
+```
+
+Disable with `CV_PLATE_ENABLED=false` / `CV_WATERMARK_ENABLED=false`.
+Missing weights skip that check (log warning). Blur/OCR is out of scope.

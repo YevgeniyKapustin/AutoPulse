@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from autopulse_shared.metrics_http import MetricsHttpServer
+from services.pricer.app.admin.service import PricerAdminService
+from services.pricer.app.api.admin import router as admin_router
 from services.pricer.app.api.errors import register_exception_handlers
 from services.pricer.app.api.health import router as health_router
 from services.pricer.app.api.pricing import router as pricing_router
@@ -19,6 +21,7 @@ from services.pricer.app.bootstrap import (
     drain_runtime_then_stop_metrics,
     start_metrics_server,
 )
+from services.pricer.app.bootstrap.readiness import check_readiness
 from services.pricer.app.core.config import Settings, get_settings
 from services.pricer.app.core.logging import setup_logging
 from services.pricer.app.core.middleware import RequestIdMiddleware
@@ -50,9 +53,10 @@ class PricerApp:
         register_exception_handlers(application)
 
     def _register_routers(self, application: FastAPI) -> None:
-        """Attach HTTP routers for health and pricing."""
+        """Attach HTTP routers for health, pricing, and admin."""
         application.include_router(health_router)
         application.include_router(pricing_router, prefix="/api/v1")
+        application.include_router(admin_router, prefix="/api/v1")
 
     @asynccontextmanager
     async def lifespan(self, app: FastAPI) -> AsyncIterator[None]:
@@ -73,8 +77,14 @@ class PricerApp:
         self._metrics = await start_metrics_server(self._settings)
         self._runtime = await build_runtime(self._settings)
         await attach_messaging_for_mode(self._runtime, self._settings.run_mode)
-        app.state.pricing = self._runtime.pricing
-        app.state.runtime = self._runtime
+        runtime = self._runtime
+        admin = PricerAdminService(
+            runtime.repository,
+            readiness_probe=lambda: check_readiness(runtime),
+        )
+        app.state.pricing = runtime.pricing
+        app.state.runtime = runtime
+        app.state.admin = admin
 
     async def _shutdown(self) -> None:
         await drain_runtime_then_stop_metrics(

@@ -32,6 +32,7 @@ async def liveness() -> LivenessResponse:
 
 @router.get(
     "/health/ready",
+    response_model=None,
     responses={
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "MySQL or RabbitMQ unavailable",

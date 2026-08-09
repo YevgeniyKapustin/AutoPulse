@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
 
@@ -13,6 +14,14 @@ from services.enrichment.app.core.exceptions import ListingNotFoundError
 # Repo metadata key; not part of EnrichedListing.
 _UPDATED_AT = "updated_at"
 _DATETIME_FIELDS = ("received_at", "enriched_at")
+
+ListingStatusFilter = Literal["enriched", "partial"]
+
+
+@dataclass(frozen=True)
+class ListingPageItem:
+    listing: EnrichedListing
+    updated_at: datetime | None
 
 
 class ListingRepository:
@@ -35,6 +44,10 @@ class ListingRepository:
         # Idempotent; createIndex is a no-op when the index already matches.
         # Large prod clusters should still prefer explicit migrations.
         await self._collection.create_index("external_id", unique=True)
+        await self._collection.create_index(
+            [(_UPDATED_AT, -1)],
+            name="listings_updated_at",
+        )
 
     async def upsert(self, listing: EnrichedListing) -> None:
         """Upsert listing fields for ``external_id`` via document ``$set``.
@@ -60,6 +73,64 @@ class ListingRepository:
         if listing is None:
             raise ListingNotFoundError(external_id)
         return listing
+
+    async def count_listings(self) -> int:
+        return int(await self._collection.count_documents({}))
+
+    async def count_fully_enriched(self) -> int:
+        return int(
+            await self._collection.count_documents(
+                {"llm_done": True, "cv_done": True},
+            )
+        )
+
+    async def count_partial(self) -> int:
+        return int(
+            await self._collection.count_documents(
+                {
+                    "$or": [
+                        {"llm_done": {"$ne": True}},
+                        {"cv_done": {"$ne": True}},
+                    ]
+                }
+            )
+        )
+
+    async def list_recent(
+        self,
+        *,
+        limit: int = 20,
+        before_updated_at: datetime | None = None,
+        status: ListingStatusFilter | None = None,
+    ) -> list[ListingPageItem]:
+        query: dict[str, Any] = {}
+        if before_updated_at is not None:
+            query[_UPDATED_AT] = {"$lt": before_updated_at}
+        if status == "enriched":
+            query["llm_done"] = True
+            query["cv_done"] = True
+        elif status == "partial":
+            query["$or"] = [
+                {"llm_done": {"$ne": True}},
+                {"cv_done": {"$ne": True}},
+            ]
+        cursor = (
+            self._collection.find(query)
+            .sort([(_UPDATED_AT, -1)])
+            .limit(max(1, min(limit, 100)))
+        )
+        items: list[ListingPageItem] = []
+        async for doc in cursor:
+            updated = doc.get(_UPDATED_AT)
+            if isinstance(updated, datetime) and updated.tzinfo is None:
+                updated = updated.replace(tzinfo=UTC)
+            items.append(
+                ListingPageItem(
+                    listing=self._to_listing(doc),
+                    updated_at=updated if isinstance(updated, datetime) else None,
+                )
+            )
+        return items
 
     @classmethod
     def _to_document(cls, listing: EnrichedListing) -> dict[str, Any]:

@@ -128,6 +128,14 @@ class InboxRepository:
             {"event_id": event_id, "status": "processing"},
         )
 
+    async def count_by_status(self) -> dict[str, int]:
+        pipeline = [{"$group": {"_id": "$status", "count": {"$sum": 1}}}]
+        counts: dict[str, int] = {"processing": 0, "completed": 0}
+        async for row in self._collection.aggregate(pipeline):
+            key = row.get("_id") or "unknown"
+            counts[str(key)] = int(row.get("count", 0))
+        return counts
+
 
 class OutboxRepository:
     def __init__(self, collection: AsyncIOMotorCollection[dict[str, Any]]) -> None:
@@ -229,3 +237,15 @@ class OutboxRepository:
             {"_id": outbox_id, "status": "processing"},
             {"$set": {"status": "pending", "claimed_at": None}},
         )
+
+    async def count_by_status(self) -> dict[str, int]:
+        pipeline = [{"$group": {"_id": "$status", "count": {"$sum": 1}}}]
+        counts: dict[str, int] = {
+            "pending": 0,
+            "processing": 0,
+            "published": 0,
+        }
+        async for row in self._collection.aggregate(pipeline):
+            key = row.get("_id") or "unknown"
+            counts[str(key)] = int(row.get("count", 0))
+        return counts

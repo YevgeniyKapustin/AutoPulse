@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from autopulse_shared.schemas.pricing import PricingResult
 from services.pricer.app.core.exceptions import PricingNotFoundError
 from services.pricer.app.services.ports import OutboxPending
@@ -82,3 +84,43 @@ class InMemoryPricingRepository:
         if external_id not in self._items:
             raise PricingNotFoundError(external_id)
         return self._items[external_id].model_copy(deep=True)
+
+    async def count_results(self) -> int:
+        return len(self._items)
+
+    async def list_recent(
+        self,
+        *,
+        limit: int = 20,
+        before_priced_at: datetime | None = None,
+    ) -> list[PricingResult]:
+        rows = sorted(
+            self._items.values(),
+            key=lambda item: item.priced_at,
+            reverse=True,
+        )
+        items: list[PricingResult] = []
+        for row in rows:
+            if before_priced_at is not None and row.priced_at >= before_priced_at:
+                continue
+            items.append(row.model_copy(deep=True))
+            if len(items) >= max(1, min(limit, 100)):
+                break
+        return items
+
+    async def count_inbox_by_status(self) -> dict[str, int]:
+        counts: dict[str, int] = {"processing": 0, "completed": 0}
+        for status in self._inbox.values():
+            counts[status] = counts.get(status, 0) + 1
+        return counts
+
+    async def count_outbox_by_status(self) -> dict[str, int]:
+        counts = {"pending": 0, "processing": 0, "published": 0}
+        for outbox_id in self._outbox:
+            if outbox_id in self._published:
+                counts["published"] += 1
+            elif outbox_id in self._processing:
+                counts["processing"] += 1
+            else:
+                counts["pending"] += 1
+        return counts

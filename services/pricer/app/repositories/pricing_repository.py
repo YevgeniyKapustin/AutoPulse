@@ -6,7 +6,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import Final, TypedDict
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -232,6 +232,58 @@ class PricingRepository:
             if row is None:
                 raise PricingNotFoundError(external_id)
             return self._to_schema(row)
+
+    async def count_results(self) -> int:
+        async with self._session_factory() as session:
+            total = await session.scalar(
+                select(func.count()).select_from(PricingResultRow)
+            )
+            return int(total or 0)
+
+    async def list_recent(
+        self,
+        *,
+        limit: int = 20,
+        before_priced_at: datetime | None = None,
+    ) -> list[PricingResult]:
+        async with self._session_factory() as session:
+            stmt = select(PricingResultRow).order_by(PricingResultRow.priced_at.desc())
+            if before_priced_at is not None:
+                cursor = before_priced_at
+                if cursor.tzinfo is not None:
+                    cursor = cursor.astimezone(UTC).replace(tzinfo=None)
+                stmt = stmt.where(PricingResultRow.priced_at < cursor)
+            stmt = stmt.limit(max(1, min(limit, 100)))
+            rows = (await session.scalars(stmt)).all()
+            return [self._to_schema(row) for row in rows]
+
+    async def count_inbox_by_status(self) -> dict[str, int]:
+        async with self._session_factory() as session:
+            rows = await session.execute(
+                select(ProcessedEventRow.status, func.count()).group_by(
+                    ProcessedEventRow.status
+                )
+            )
+            counts: dict[str, int] = {"processing": 0, "completed": 0}
+            for status, count in rows.all():
+                counts[str(status or "unknown")] = int(count)
+            return counts
+
+    async def count_outbox_by_status(self) -> dict[str, int]:
+        async with self._session_factory() as session:
+            rows = await session.execute(
+                select(OutboxMessageRow.status, func.count()).group_by(
+                    OutboxMessageRow.status
+                )
+            )
+            counts: dict[str, int] = {
+                "pending": 0,
+                "processing": 0,
+                "published": 0,
+            }
+            for status, count in rows.all():
+                counts[str(status or "unknown")] = int(count)
+            return counts
 
     @staticmethod
     def _to_row_values(result: PricingResult) -> PricingRowValues:

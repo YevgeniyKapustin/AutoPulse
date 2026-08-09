@@ -80,6 +80,14 @@ docker compose config   # validate merge
 `--reload` restarts the process on code change; lifespan shutdown stops
 consumers and closes aio_pika channels.
 
+Local ops dashboard (enrichment, no auth): `http://127.0.0.1:8001/admin`.
+Keep it host-bound; do not publish `/admin` in production compose ports.
+Disable via `ADMIN_UI_ENABLED=false`.
+`compose.override.yaml` sets `PRICER_BASE_URL=http://pricer:8002` and
+`RABBITMQ_MANAGEMENT_URL=http://rabbitmq:15672` so the enrichment
+container can reach siblings; metrics dashboard links stay on
+`127.0.0.1:9091` / `:9092` for the host browser.
+
 Logging stack (ClickHouse + Vector + Grafana) is opt-in:
 
 ```bash
@@ -125,13 +133,13 @@ docker compose run --rm --entrypoint "" pricer \
 
 | # | Factor | Status |
 |---|--------|--------|
-| I | Codebase | One repo, two deployables (`enrichment` / `pricer`) |
+| I | Codebase | One repo, deployables (`enrichment` / `pricer` / `crawler`) |
 | II | Dependencies | Per-service Poetry lockfiles; images install from those |
 | III | Config | Env / required `env_file`; prod fail-closed on secrets |
 | IV | Backing services | Rabbit/Mongo/MySQL via env URLs/hosts |
 | V | Build, release, run | Multi-stage build; CI pushes `TAG` digests to GHCR |
 | VI | Processes | Stateless apps; API vs worker split in prod |
-| VII | Port binding | Uvicorn binds `0.0.0.0:8001/8002`; scrape metrics on `9091/9092` |
+| VII | Port binding | Uvicorn binds `0.0.0.0:8001/8002/8003`; scrape metrics on `9091/9092` |
 | VIII | Concurrency | Scale API and worker replicas independently |
 | IX | Disposability | Fast health; graceful stop < `stop_grace_period` |
 | X | Dev/prod parity | Same Dockerfiles; override only for local ports/reload |

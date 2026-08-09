@@ -32,6 +32,7 @@ async def liveness() -> LivenessResponse:
 
 @router.get(
     "/health/ready",
+    response_model=None,
     responses={
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "MongoDB or RabbitMQ unavailable",
@@ -39,7 +40,8 @@ async def liveness() -> LivenessResponse:
     },
 )
 async def readiness(request: Request) -> ReadinessResponse | JSONResponse:
-    """Readiness probe: MongoDB + RabbitMQ available for business traffic."""
+    """Readiness probe: MongoDB + RabbitMQ available for business
+    traffic."""
     runtime: EnrichmentRuntime = request.app.state.runtime
     ready, checks = await check_readiness(runtime)
     body: ReadinessResponse = {
