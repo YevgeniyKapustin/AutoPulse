@@ -1,4 +1,4 @@
-"""Computer vision helpers — async fetch, Pillow off the event loop."""
+"""Computer vision helpers — async fetch, analysis off the loop."""
 
 from __future__ import annotations
 

@@ -7,6 +7,7 @@ import pytest
 from PIL import Image
 from pydantic import HttpUrl
 from services.enrichment.app.cv import CvService, ImageAnalyzer
+from services.enrichment.app.cv.defects import license_plate_detected
 from services.enrichment.app.cv.service import _MAX_DOWNLOAD_BYTES
 
 
@@ -82,14 +83,50 @@ async def test_images_fetched_concurrently() -> None:
     class _Listing:
         image_urls = [HttpUrl(u) for u in urls]
 
+    # Brightness-only: ignore watermark heuristics in this test.
+    analyzer = ImageAnalyzer(checks=(ImageAnalyzer._check_brightness,))
     try:
-        async with CvService(http_client=client) as cv:
+        async with CvService(http_client=client, analyzer=analyzer) as cv:
             defects = await cv.detect_defects(_Listing())  # type: ignore[arg-type]
     finally:
         await client.aclose()
 
     assert defects == []
     assert set(seen) == set(urls)
+
+
+@pytest.mark.asyncio
+async def test_fake_plate_check_emits_bbox() -> None:
+    url = "https://cdn.example.com/car.jpg"
+    body = _jpeg_bytes((128, 128, 128), (64, 64))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body)
+
+    def fake_plate(image: Image.Image, image_url: HttpUrl):
+        return [
+            license_plate_detected(
+                image_url,
+                0.9,
+                [0.1, 0.2, 0.4, 0.35],
+            )
+        ]
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    class _Listing:
+        image_urls = [HttpUrl(url)]
+
+    analyzer = ImageAnalyzer(checks=(fake_plate,))
+    try:
+        async with CvService(http_client=client, analyzer=analyzer) as cv:
+            defects = await cv.detect_defects(_Listing())  # type: ignore[arg-type]
+    finally:
+        await client.aclose()
+
+    assert len(defects) == 1
+    assert defects[0].label == "license_plate_detected"
+    assert defects[0].bbox == [0.1, 0.2, 0.4, 0.35]
 
 
 @pytest.mark.asyncio

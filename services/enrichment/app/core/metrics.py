@@ -26,7 +26,12 @@ class MetricsRegistry:
             self._counters[key] += amount
 
     def render_prometheus(self) -> str:
-        lines: list[str] = []
+        # Always emit a sample so browsers / scrapes never see an empty body.
+        lines: list[str] = [
+            "# HELP autopulse_up 1 if the process metrics registry is alive.",
+            "# TYPE autopulse_up gauge",
+            "autopulse_up 1",
+        ]
         with self._lock:
             items = list(self._counters.items())
         declared: set[str] = set()

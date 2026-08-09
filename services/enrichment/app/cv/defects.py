@@ -7,8 +7,19 @@ from pydantic import HttpUrl
 from autopulse_shared.schemas.listing import DefectInfo
 
 
-def defect(label: str, confidence: float, url: HttpUrl) -> DefectInfo:
-    return DefectInfo(label=label, confidence=confidence, image_url=url)
+def defect(
+    label: str,
+    confidence: float,
+    url: HttpUrl,
+    *,
+    bbox: list[float] | None = None,
+) -> DefectInfo:
+    return DefectInfo(
+        label=label,
+        confidence=confidence,
+        image_url=url,
+        bbox=bbox,
+    )
 
 
 def image_fetch_failed(url: HttpUrl) -> DefectInfo:
@@ -21,3 +32,19 @@ def image_too_large(url: HttpUrl, *, confidence: float = 0.6) -> DefectInfo:
 
 def image_unreadable(url: HttpUrl) -> DefectInfo:
     return defect("image_unreadable", 0.55, url)
+
+
+def license_plate_detected(
+    url: HttpUrl,
+    confidence: float,
+    bbox: list[float],
+) -> DefectInfo:
+    return defect("license_plate_detected", confidence, url, bbox=bbox)
+
+
+def watermark_suspected(
+    url: HttpUrl,
+    confidence: float,
+    bbox: list[float],
+) -> DefectInfo:
+    return defect("watermark_suspected", confidence, url, bbox=bbox)

@@ -43,12 +43,24 @@ RUN poetry install --only main --no-root --no-ansi \
 COPY shared /build/shared
 RUN pip install --force-reinstall --no-deps /build/shared
 
+# Pretrained plate detector + scene-text watermark model.
+COPY services/enrichment/scripts/download_cv_models.py \
+    /build/services/enrichment/scripts/download_cv_models.py
+RUN mkdir -p /build/services/enrichment/models \
+    && python /build/services/enrichment/scripts/download_cv_models.py \
+    || echo "WARN: CV ONNX download skipped"
+
 
 FROM ${PYTHON_IMAGE} AS runtime
 
 RUN groupadd --system --gid 10001 appuser \
     && useradd --system --uid 10001 --gid appuser --home /app \
         --shell /usr/sbin/nologin appuser
+
+# libgomp required by onnxruntime on slim images.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # PYTHONPATH=/app for `services.*`. Shared lives in /opt/venv site-packages.
 # /app/shared is still present so compose.override bind-mounts can hot-reload
@@ -64,6 +76,8 @@ WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 COPY --chown=appuser:appuser shared /app/shared
 COPY --chown=appuser:appuser services/enrichment /app/services/enrichment
+COPY --from=builder --chown=appuser:appuser \
+    /build/services/enrichment/models /app/services/enrichment/models
 
 USER appuser
 

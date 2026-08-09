@@ -42,6 +42,8 @@ Pull hidden value signals from free text, e.g.:
 
 - Resize / normalize images off the event loop
 - Flag obvious damage regions or empty/garbage photos
+- Detect license plates (pretrained plate YOLO ONNX)
+- Suspect auction watermarks via scene-text YOLO + overlay scoring
 - Optional: plate blur (privacy) — later
 
 ## Margin rules (baseline)

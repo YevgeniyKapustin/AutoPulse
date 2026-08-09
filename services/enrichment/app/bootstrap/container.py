@@ -14,7 +14,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from services.enrichment.app.consumers.raw_listing_consumer import RawListingConsumer
 from services.enrichment.app.core.config import Settings
 from services.enrichment.app.core.metrics import METRICS
-from services.enrichment.app.cv import CvService
+from services.enrichment.app.cv.factory import build_cv_service
 from services.enrichment.app.enrichment.orchestrator import (
     EnrichmentOrchestrator,
 )
@@ -80,7 +80,7 @@ async def build_runtime(settings: Settings) -> EnrichmentRuntime:
         orchestrator = EnrichmentOrchestrator(
             repository=repository,
             llm=LlmService(settings),
-            cv=CvService(max_workers=settings.cv_max_workers),
+            cv=build_cv_service(settings),
         )
         return EnrichmentRuntime(
             settings=settings,

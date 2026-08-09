@@ -1,9 +1,9 @@
-"""Synchronous Pillow heuristics for listing images (CPU-bound)."""
+"""Synchronous image analysis for listing photos (CPU-bound)."""
 
 from __future__ import annotations
 
 import io
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from PIL import Image, ImageFile, ImageStat, UnidentifiedImageError
 from pydantic import HttpUrl
@@ -20,11 +20,11 @@ _MAX_IMAGE_PIXELS = 25_000_000
 Image.MAX_IMAGE_PIXELS = _MAX_IMAGE_PIXELS
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-BrightnessCheck = Callable[[float, HttpUrl], DefectInfo | None]
+ImageCheck = Callable[[Image.Image, HttpUrl], list[DefectInfo]]
 
 
 class ImageAnalyzer:
-    """Decode image bytes and run pluggable brightness heuristics."""
+    """Decode image bytes once and run pluggable image checks."""
 
     _RESIZE = (512, 512)
     _RGB_CHANNELS_COUNT = 3.0
@@ -33,49 +33,44 @@ class ImageAnalyzer:
 
     def __init__(
         self,
-        brightness_checks: tuple[BrightnessCheck, ...] | None = None,
+        checks: Sequence[ImageCheck] | None = None,
     ) -> None:
-        self._brightness_checks = brightness_checks or self._default_checks()
+        self._checks = tuple(checks) if checks is not None else self._default_checks()
 
     @classmethod
-    def _default_checks(cls) -> tuple[BrightnessCheck, ...]:
-        return (cls._check_darkness, cls._check_overexposure)
+    def _default_checks(cls) -> tuple[ImageCheck, ...]:
+        return (cls._check_brightness,)
 
     @classmethod
-    def _check_darkness(cls, brightness: float, url: HttpUrl) -> DefectInfo | None:
-        if brightness < cls._DARK_IMAGE_BRIGHTNESS_THRESHOLD:
-            return defect("very_dark_image", 0.7, url)
-        return None
-
-    @classmethod
-    def _check_overexposure(
+    def _check_brightness(
         cls,
-        brightness: float,
+        image: Image.Image,
         url: HttpUrl,
-    ) -> DefectInfo | None:
+    ) -> list[DefectInfo]:
+        resized = image.resize(cls._RESIZE)
+        brightness = sum(ImageStat.Stat(resized).mean) / cls._RGB_CHANNELS_COUNT
+        found: list[DefectInfo] = []
+        if brightness < cls._DARK_IMAGE_BRIGHTNESS_THRESHOLD:
+            found.append(defect("very_dark_image", 0.7, url))
         if brightness > cls._OVEREXPOSED_BRIGHTNESS_THRESHOLD:
-            return defect("overexposed_image", 0.65, url)
-        return None
+            found.append(defect("overexposed_image", 0.65, url))
+        return found
 
     def inspect(self, data: bytes, url: HttpUrl) -> list[DefectInfo]:
         try:
-            mean = self._mean_rgb(data)
+            image = self._decode_rgb(data)
         except Image.DecompressionBombError:
             return [image_too_large(url, confidence=0.7)]
         except (UnidentifiedImageError, OSError, ValueError):
             return [image_unreadable(url)]
 
-        brightness = sum(mean) / self._RGB_CHANNELS_COUNT
         defects: list[DefectInfo] = []
-        for check in self._brightness_checks:
-            found = check(brightness, url)
-            if found is not None:
-                defects.append(found)
+        with image:
+            for check in self._checks:
+                defects.extend(check(image, url))
         return defects
 
-    def _mean_rgb(self, data: bytes) -> list[float]:
-        with Image.open(io.BytesIO(data)) as image:
-            image.load()
-            rgb = image.convert("RGB")
-            resized = rgb.resize(self._RESIZE)
-            return list(ImageStat.Stat(resized).mean)
+    def _decode_rgb(self, data: bytes) -> Image.Image:
+        with Image.open(io.BytesIO(data)) as opened:
+            opened.load()
+            return opened.convert("RGB")

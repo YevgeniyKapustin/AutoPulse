@@ -1,4 +1,4 @@
-"""Computer-vision enrichment: fetch + image heuristics."""
+"""Computer-vision enrichment: fetch + Pillow / ONNX checks."""
 
 from services.enrichment.app.cv.analyzer import ImageAnalyzer
 from services.enrichment.app.cv.service import CvService
