@@ -101,6 +101,32 @@ services:
       retries: 3
       start_period: 25s
 
+  crawler:
+    restart: unless-stopped
+    stop_grace_period: 15s
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      ENRICHMENT_BASE_URL: http://enrichment:8001
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: crawler
+    networks: [backend]
+    depends_on:
+      enrichment:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health/live')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
   pricer:
     restart: unless-stopped
     stop_grace_period: 25s

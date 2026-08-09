@@ -37,8 +37,8 @@ item in the current week unless the user redirects.
 
 ## Stretch (after MVP)
 
-- [ ] Optional orchestrator UI / admin API
+- [x] Optional orchestrator UI / admin API
 - [x] Metrics (Prometheus text on scrape ports `:9091` / `:9092`) and structured JSON logs
-- [ ] Real watermark / plate heuristics
-- [ ] Multi-source crawler adapters
+- [x] Real watermark / plate heuristics
+- [x] Multi-source crawler adapters
 - [x] RabbitMQ production hardening (see `docs/messaging.md`)

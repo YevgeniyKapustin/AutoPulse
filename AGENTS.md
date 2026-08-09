@@ -31,6 +31,7 @@ slices over incomplete sprawl.
 | Contracts | `shared/autopulse_shared/schemas/` |
 | Enrichment | `services/enrichment/app/` |
 | Pricer | `services/pricer/app/` |
+| Crawler adapters | `services/crawler/app/` |
 | Compose / CI | `compose.yaml`, `compose.prod.yaml`, `.github/workflows/` |
 | Specs / plans | `docs/` |
 

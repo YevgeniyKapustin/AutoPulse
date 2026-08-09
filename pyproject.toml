@@ -40,8 +40,13 @@ line-ending = "auto"
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
-mypy_path = ["shared", "services/enrichment", "services/pricer"]
-files = ["shared", "services/enrichment/app", "services/pricer/app"]
+mypy_path = ["shared", "services/enrichment", "services/pricer", "services/crawler"]
+files = [
+  "shared",
+  "services/enrichment/app",
+  "services/pricer/app",
+  "services/crawler/app",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -50,6 +55,7 @@ testpaths = [
   "shared/tests",
   "services/enrichment/tests",
   "services/pricer/tests",
+  "services/crawler/tests",
   "tests",
 ]
 markers = [

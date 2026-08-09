@@ -29,6 +29,10 @@ Compose manual smoke:
 
 ```bash
 docker compose up -d --build
+curl -s -X POST http://localhost:8003/api/v1/ingest/copart \
+  -H "Content-Type: application/json" \
+  -d @services/crawler/fixtures/copart_lot.json
+# or legacy RawListing shape:
 curl -s -X POST http://localhost:8001/api/v1/listings \
   -H "Content-Type: application/json" \
   -d @docs/fixtures/raw_listing_sample.json

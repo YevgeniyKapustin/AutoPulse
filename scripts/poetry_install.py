@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SERVICES = (
     ROOT / "services" / "enrichment",
     ROOT / "services" / "pricer",
+    ROOT / "services" / "crawler",
 )
 DEFAULT_SHARED = ROOT / "shared"
 _LOCK_VERSION_RE = re.compile(r"^2\.")

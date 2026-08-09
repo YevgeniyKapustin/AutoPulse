@@ -25,6 +25,13 @@ services:
     ports:
       - "127.0.0.1:8001:8001"
       - "127.0.0.1:9091:9091"
+    environment:
+      # Server-side admin hops use Compose DNS (not host localhost).
+      RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
+      PRICER_BASE_URL: http://pricer:8002
+      # Metrics links are opened in the host browser.
+      METRICS_SCRAPE_URL: http://127.0.0.1:9091/metrics
+      PRICER_METRICS_SCRAPE_URL: http://127.0.0.1:9092/metrics
     env_file:
       - path: .env
         required: false
@@ -71,6 +78,35 @@ services:
         "0.0.0.0",
         "--port",
         "8002",
+        "--reload",
+      ]
+
+  crawler:
+    build:
+      context: .
+      dockerfile: services/crawler/Dockerfile
+      target: runtime
+    image: autopulse-crawler:local
+    ports:
+      - "127.0.0.1:8003:8003"
+    environment:
+      ENRICHMENT_BASE_URL: http://enrichment:8001
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./services/crawler:/app/services/crawler
+      - ./shared:/app/shared
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "services.crawler.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8003",
         "--reload",
       ]
 

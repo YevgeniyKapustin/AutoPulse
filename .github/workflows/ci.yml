@@ -133,3 +133,16 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/autopulse-pricer:sha-${{ github.sha }}
           cache-from: type=gha,scope=pricer
           cache-to: type=gha,mode=max,scope=pricer
+
+      - name: Build crawler image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/crawler/Dockerfile
+          target: runtime
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/autopulse-crawler:${{ env.TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/autopulse-crawler:sha-${{ github.sha }}
+          cache-from: type=gha,scope=crawler
+          cache-to: type=gha,mode=max,scope=crawler

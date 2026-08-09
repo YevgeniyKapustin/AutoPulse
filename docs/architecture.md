@@ -60,25 +60,31 @@ Malformed / permanent failures skip TTL retry and go straight to DLQ.
 
 ```
 services/enrichment/app/
-  api/           HTTP routes
+  api/           HTTP routes (+ admin JSON/UI)
+  admin/         ops dashboard service, templates, static
   bootstrap/     composition root + process lifecycle
   consumers/     aio_pika workers
   enrichment/    orchestrator + ports (protocols)
   llm/           heuristic + OpenAI option extraction
-  cv/            image fetch + Pillow analysis
+  cv/            image fetch + Pillow/OpenCV + plate ONNX
   messaging/     topology, publisher, outbox sink, retry
   repositories/  Mongo adapters (listings, inbox, outbox)
   core/          config, middleware, circuit breaker, metrics
 
-```
 services/pricer/app/
-  api/
+  api/           (+ /api/v1/admin overview)
+  admin/         admin service DTOs
   bootstrap/     composition root + process lifecycle
   consumers/
   services/      pricing engine + ports + margin/sklearn
   messaging/     topology, outbox publisher, TTL retry
   repositories/  MySQL adapters
   models/        SQLAlchemy ORM
+
+services/crawler/app/
+  adapters/      Copart / IAAI / manual → RawListing
+  api/           /api/v1/ingest/{source}
+  messaging/     enrichment HTTP publisher
 ```
 
 ## Evolution notes
@@ -86,3 +92,9 @@ services/pricer/app/
 - Keep contracts in `shared/` versioned by fields, not by breaking renames.
 - Prefer additive event fields; consumers must ignore unknowns.
 - When adding a third service, reuse the same exchange and new routing keys.
+
+## Crawler adapters
+
+`services/crawler` normalizes vendor-shaped JSON (Copart / IAAI / manual)
+into `RawListing` and POSTs enrichment `POST /api/v1/listings`. It is an
+ingest edge, not a live auction scraper.

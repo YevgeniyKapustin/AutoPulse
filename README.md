@@ -21,6 +21,7 @@ flowchart TD
 |---------|------|----------------|
 | `enrichment` | 8001 | LLM + CV enrichment, Mongo state, ack-on-aggregation |
 | `pricer` | 8002 | Margin rules, turnover estimate, MySQL persistence |
+| `crawler` | 8003 | Multi-source adapters → enrichment ingest (no live scrape) |
 | scrape `/metrics` | 9091 / 9092 | Prometheus text (not on the public API ports) |
 | RabbitMQ | 5672 / 15672 | Topic exchange `autopulse.cars` |
 | MongoDB | 27017 | Per-car enrichment state |
