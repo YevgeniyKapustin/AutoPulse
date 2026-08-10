@@ -11,6 +11,7 @@ from autopulse_shared.schemas.listing import EnrichedListing
 from autopulse_shared.schemas.pricing import PricingResult
 
 ListingStatusFilter = Literal["enriched", "partial"]
+QueueAlertLevel = Literal["ok", "warn", "bad", "unknown"]
 
 
 class QueueDepths(BaseModel):
@@ -20,6 +21,21 @@ class QueueDepths(BaseModel):
     pricer_work: int | None = None
     pricer_retry: int | None = None
     pricer_dlq: int | None = None
+
+
+class QueueDepthCard(BaseModel):
+    key: str
+    label: str
+    depth: int | None = None
+    level: QueueAlertLevel = "unknown"
+
+
+class QueueAlertSummary(BaseModel):
+    cards: list[QueueDepthCard] = Field(default_factory=list)
+    bad_count: int = 0
+    warn_count: int = 0
+    work_warn_depth: int
+    dlq_warn_depth: int
 
 
 class MessagingCounts(BaseModel):
@@ -39,6 +55,7 @@ class AdminOverview(BaseModel):
     listings_partial: int
     messaging: MessagingCounts
     queues: QueueDepths
+    queue_alerts: QueueAlertSummary
     readiness: ReadinessSnapshot
     pricer: dict[str, object] | None = None
     metrics_enrichment_url: str

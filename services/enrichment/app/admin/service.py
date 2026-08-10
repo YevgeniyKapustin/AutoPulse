@@ -13,6 +13,7 @@ from services.enrichment.app.admin.ports import (
     RawReEnricher,
     StatusCountStore,
 )
+from services.enrichment.app.admin.queue_alerts import QueueKind, classify_depth
 from services.enrichment.app.admin.schemas import (
     AdminOverview,
     ListingAdminPage,
@@ -20,6 +21,8 @@ from services.enrichment.app.admin.schemas import (
     ListingStatusFilter,
     MessagingCounts,
     PipelineDetail,
+    QueueAlertSummary,
+    QueueDepthCard,
     QueueDepths,
     ReadinessSnapshot,
     ReEnrichAccepted,
@@ -53,13 +56,14 @@ class AdminService:
         self._readiness_probe = readiness_probe
 
     async def overview(self) -> AdminOverview:
+        settings = self._settings
         queue_names = [
-            self._settings.enrichment_queue_name,
-            self._settings.enrichment_retry_queue_name,
-            self._settings.enrichment_dlq_name,
-            self._settings.pricer_queue_name,
-            self._settings.pricer_retry_queue_name,
-            self._settings.pricer_dlq_name,
+            settings.enrichment_queue_name,
+            settings.enrichment_retry_queue_name,
+            settings.enrichment_dlq_name,
+            settings.pricer_queue_name,
+            settings.pricer_retry_queue_name,
+            settings.pricer_dlq_name,
         ]
         depths = await self._queues.depths(queue_names)
         enrichment_ready = False
@@ -72,6 +76,14 @@ class AdminService:
             ready_raw = pricer_overview.get("ready")
             if isinstance(ready_raw, bool):
                 pricer_ready = ready_raw
+        queues = QueueDepths(
+            enrichment_raw=depths.get(settings.enrichment_queue_name),
+            enrichment_retry=depths.get(settings.enrichment_retry_queue_name),
+            enrichment_dlq=depths.get(settings.enrichment_dlq_name),
+            pricer_work=depths.get(settings.pricer_queue_name),
+            pricer_retry=depths.get(settings.pricer_retry_queue_name),
+            pricer_dlq=depths.get(settings.pricer_dlq_name),
+        )
         return AdminOverview(
             listings_total=await self._listings.count_listings(),
             listings_enriched=await self._listings.count_fully_enriched(),
@@ -80,22 +92,52 @@ class AdminService:
                 inbox=await self._inbox.count_by_status(),
                 outbox=await self._outbox.count_by_status(),
             ),
-            queues=QueueDepths(
-                enrichment_raw=depths.get(self._settings.enrichment_queue_name),
-                enrichment_retry=depths.get(self._settings.enrichment_retry_queue_name),
-                enrichment_dlq=depths.get(self._settings.enrichment_dlq_name),
-                pricer_work=depths.get(self._settings.pricer_queue_name),
-                pricer_retry=depths.get(self._settings.pricer_retry_queue_name),
-                pricer_dlq=depths.get(self._settings.pricer_dlq_name),
-            ),
+            queues=queues,
+            queue_alerts=self._queue_alerts(queues),
             readiness=ReadinessSnapshot(
                 enrichment_ready=enrichment_ready,
                 enrichment_checks=enrichment_checks,
                 pricer_ready=pricer_ready,
             ),
             pricer=pricer_overview,
-            metrics_enrichment_url=self._settings.metrics_scrape_url,
-            metrics_pricer_url=self._settings.pricer_metrics_scrape_url,
+            metrics_enrichment_url=settings.metrics_scrape_url,
+            metrics_pricer_url=settings.pricer_metrics_scrape_url,
+        )
+
+    def _queue_alerts(self, queues: QueueDepths) -> QueueAlertSummary:
+        settings = self._settings
+        specs: tuple[tuple[str, str, QueueKind], ...] = (
+            ("enrichment_raw", settings.enrichment_queue_name, "work"),
+            ("enrichment_retry", settings.enrichment_retry_queue_name, "retry"),
+            ("enrichment_dlq", settings.enrichment_dlq_name, "dlq"),
+            ("pricer_work", settings.pricer_queue_name, "work"),
+            ("pricer_retry", settings.pricer_retry_queue_name, "retry"),
+            ("pricer_dlq", settings.pricer_dlq_name, "dlq"),
+        )
+        cards: list[QueueDepthCard] = []
+        bad_count = 0
+        warn_count = 0
+        for key, label, kind in specs:
+            depth = getattr(queues, key)
+            level = classify_depth(
+                depth,
+                kind=kind,
+                work_warn_depth=settings.admin_queue_warn_depth,
+                dlq_warn_depth=settings.admin_dlq_warn_depth,
+            )
+            if level == "bad":
+                bad_count += 1
+            elif level == "warn":
+                warn_count += 1
+            cards.append(
+                QueueDepthCard(key=key, label=label, depth=depth, level=level)
+            )
+        return QueueAlertSummary(
+            cards=cards,
+            bad_count=bad_count,
+            warn_count=warn_count,
+            work_warn_depth=settings.admin_queue_warn_depth,
+            dlq_warn_depth=settings.admin_dlq_warn_depth,
         )
 
     async def list_listings(

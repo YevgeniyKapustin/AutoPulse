@@ -53,13 +53,30 @@
 
     <section class="panel">
       <h2>Queue depths</h2>
+      {% if overview.queue_alerts.bad_count or overview.queue_alerts.warn_count %}
+      <p class="alert-banner {% if overview.queue_alerts.bad_count %}bad{% else %}warn{% endif %}">
+        {% if overview.queue_alerts.bad_count %}
+          {{ overview.queue_alerts.bad_count }} queue(s) over threshold
+          (DLQ &gt; {{ overview.queue_alerts.dlq_warn_depth }},
+          work/retry &gt; {{ overview.queue_alerts.work_warn_depth }}).
+        {% else %}
+          {{ overview.queue_alerts.warn_count }} queue(s) approaching backlog limit
+          (work/retry warn above {{ (overview.queue_alerts.work_warn_depth // 2) }}).
+        {% endif %}
+      </p>
+      {% else %}
+      <p class="hint">
+        Thresholds: DLQ &gt; {{ overview.queue_alerts.dlq_warn_depth }} bad;
+        work/retry &gt; {{ overview.queue_alerts.work_warn_depth }} bad.
+      </p>
+      {% endif %}
       <div class="cards six">
-        <article class="card"><h3>enrichment.raw</h3><p class="stat">{{ overview.queues.enrichment_raw if overview.queues.enrichment_raw is not none else "—" }}</p></article>
-        <article class="card"><h3>enrichment.retry</h3><p class="stat">{{ overview.queues.enrichment_retry if overview.queues.enrichment_retry is not none else "—" }}</p></article>
-        <article class="card"><h3>enrichment.dlq</h3><p class="stat">{{ overview.queues.enrichment_dlq if overview.queues.enrichment_dlq is not none else "—" }}</p></article>
-        <article class="card"><h3>pricer.enriched</h3><p class="stat">{{ overview.queues.pricer_work if overview.queues.pricer_work is not none else "—" }}</p></article>
-        <article class="card"><h3>pricer.retry</h3><p class="stat">{{ overview.queues.pricer_retry if overview.queues.pricer_retry is not none else "—" }}</p></article>
-        <article class="card"><h3>pricer.dlq</h3><p class="stat">{{ overview.queues.pricer_dlq if overview.queues.pricer_dlq is not none else "—" }}</p></article>
+        {% for card in overview.queue_alerts.cards %}
+        <article class="card {{ card.level }}">
+          <h3>{{ card.label }}</h3>
+          <p class="stat">{{ card.depth if card.depth is not none else "—" }}</p>
+        </article>
+        {% endfor %}
       </div>
     </section>
 

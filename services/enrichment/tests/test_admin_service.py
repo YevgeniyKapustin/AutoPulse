@@ -104,8 +104,41 @@ async def test_overview_partial_when_pricer_unreachable() -> None:
         pricer_retry=None,
         pricer_dlq=None,
     )
+    assert overview.queue_alerts.bad_count == 0
+    levels = {card.key: card.level for card in overview.queue_alerts.cards}
+    assert levels["enrichment_raw"] == "ok"
+    assert levels["enrichment_dlq"] == "ok"
+    assert levels["enrichment_retry"] == "unknown"
     assert overview.pricer is None
     assert overview.readiness.pricer_ready is None
+
+
+@pytest.mark.asyncio
+async def test_overview_marks_dlq_bad() -> None:
+    settings = Settings(
+        enrichment_queue_name="enrichment.raw",
+        enrichment_retry_queue_name="enrichment.retry",
+        enrichment_dlq_name="enrichment.dlq",
+        pricer_queue_name="pricer.enriched",
+        pricer_retry_queue_name="pricer.retry",
+        pricer_dlq_name="pricer.dlq",
+        admin_dlq_warn_depth=0,
+        admin_queue_warn_depth=100,
+    )
+    admin = AdminService(
+        settings=settings,
+        listings=InMemoryListingRepository(),
+        inbox=_StatusCounts({}),
+        outbox=_StatusCounts({}),
+        queues=_QueueProbe({"enrichment.dlq": 2, "enrichment.raw": 150}),
+        pricer=_PricerClient(overview=None),
+        re_enricher=_ReEnricher(),
+    )
+    overview = await admin.overview()
+    levels = {card.key: card.level for card in overview.queue_alerts.cards}
+    assert levels["enrichment_dlq"] == "bad"
+    assert levels["enrichment_raw"] == "bad"
+    assert overview.queue_alerts.bad_count >= 2
 
 
 @pytest.mark.asyncio

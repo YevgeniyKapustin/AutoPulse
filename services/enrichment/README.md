@@ -29,25 +29,28 @@ uvicorn services.enrichment.app.main:app --reload --port 8001
 
 ## Ops dashboard
 
-Local-only admin UI (no auth):
+Local-only admin UI (no auth by default):
 
 - UI: `http://127.0.0.1:8001/admin`
 - JSON: `/api/v1/admin/overview`, `/api/v1/admin/listings`, …
 - Re-enrich: `POST /api/v1/admin/listings/{external_id}/re-enrich`
 
-Disable with `ADMIN_UI_ENABLED=false`. Queue depths come from RabbitMQ
-Management (`RABBITMQ_MANAGEMENT_URL`). Do not expose `/admin` publicly.
+Set `UI_AUTH_PASSWORD` to require HTTP Basic (`UI_AUTH_USERNAME`) or
+`X-API-Key: <password>`. Disable with `ADMIN_UI_ENABLED=false`. Queue
+depths come from RabbitMQ Management (`RABBITMQ_MANAGEMENT_URL`). Cards
+turn yellow/red from `ADMIN_QUEUE_WARN_DEPTH` / `ADMIN_DLQ_WARN_DEPTH`
+(DLQ defaults to any message). Do not expose `/admin` publicly.
 
 ## Dealer pipeline
 
-Dealer-facing UI (no auth, local DX):
+Dealer-facing UI (open locally when password unset):
 
 - Submit: `http://127.0.0.1:8001/` or `/dealer`
 - Sample lots: crawler fixtures via `POST /dealer/samples/{copart|iaai}`
 - Result poll: `/dealer/listings/{external_id}`
 
 Needs crawler up (`CRAWLER_BASE_URL`, Compose: `http://crawler:8003`).
-Disable with `DEALER_UI_ENABLED=false`.
+Same `UI_AUTH_*` gate as admin. Disable with `DEALER_UI_ENABLED=false`.
 
 ## CV models
 
