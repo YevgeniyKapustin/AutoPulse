@@ -60,7 +60,8 @@ consumer + Mongo path works end-to-end.
 ## Out of scope (for now)
 
 - Full crawler product
-- Auth / multi-tenant SaaS
+- Auth / multi-tenant SaaS (lightweight UI Basic/`X-API-Key` is in
+  `docs/roadmap.md` Next — not a full identity product)
 - Frontend orchestrator UI (optional later)
 - Real YOLO training pipeline (use a light pretrained model when CV lands)
 

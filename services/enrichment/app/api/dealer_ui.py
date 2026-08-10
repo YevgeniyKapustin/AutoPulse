@@ -5,10 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from services.enrichment.app.core.ui_auth import require_ui_auth
 from services.enrichment.app.dealer.crawler_client import CrawlerSampleError
 from services.enrichment.app.dealer.normalize import (
     DealerSubmitError,
@@ -20,7 +21,10 @@ from services.enrichment.app.dealer.service import DealerService
 _TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "dealer" / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
-router = APIRouter(tags=["dealer-ui"])
+router = APIRouter(
+    tags=["dealer-ui"],
+    dependencies=[Depends(require_ui_auth)],
+)
 
 
 def _require_dealer(request: Request) -> DealerService:

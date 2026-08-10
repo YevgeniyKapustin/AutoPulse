@@ -4,16 +4,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from services.enrichment.app.admin.service import AdminService
+from services.enrichment.app.core.ui_auth import require_ui_auth
 
 _TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "admin" / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
-router = APIRouter(tags=["admin-ui"])
+router = APIRouter(
+    tags=["admin-ui"],
+    dependencies=[Depends(require_ui_auth)],
+)
 
 
 def _require_admin(request: Request) -> AdminService:

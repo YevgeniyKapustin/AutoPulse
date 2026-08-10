@@ -34,3 +34,10 @@ make migrate-docker  # same container image as the app
 - Pricing + outbox insert share one MySQL commit
 - Outbox drain on success + periodic ticker (`OUTBOX_DRAIN_INTERVAL_SEC`)
 - `POST /api/v1/pricing/estimate` is dry-run; `POST /api/v1/pricing` persists
+
+## Admin API
+
+`GET /api/v1/admin/overview` and `GET /api/v1/admin/pricing` honor the same
+`UI_AUTH_USERNAME` / `UI_AUTH_PASSWORD` gate as enrichment UIs (HTTP Basic
+or `X-API-Key`). Empty password keeps local DX open. Public pricing routes
+under `/api/v1/pricing` stay ungated.

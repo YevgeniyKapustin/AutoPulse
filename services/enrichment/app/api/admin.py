@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from services.enrichment.app.admin.schemas import (
     AdminOverview,
@@ -15,8 +15,13 @@ from services.enrichment.app.admin.schemas import (
     ReEnrichAccepted,
 )
 from services.enrichment.app.admin.service import AdminService
+from services.enrichment.app.core.ui_auth import require_ui_auth
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(require_ui_auth)],
+)
 
 LimitQuery = Annotated[int, Query(ge=1, le=100)]
 CursorQuery = Annotated[datetime | None, Query()]

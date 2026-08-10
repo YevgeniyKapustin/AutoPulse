@@ -19,12 +19,18 @@ class HttpPricerAdminClient:
         base_url: str,
         *,
         timeout_sec: float = 2.0,
+        username: str | None = None,
+        password: str | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self._owns_http = http_client is None
+        auth: tuple[str, str] | None = None
+        if password:
+            auth = (username or "autopulse", password)
         self._http = http_client or httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
             timeout=timeout_sec,
+            auth=auth,
         )
 
     async def aclose(self) -> None:

@@ -43,6 +43,8 @@ async def build_admin_bundle(runtime: EnrichmentRuntime) -> AdminBundle | None:
     pricer_client = HttpPricerAdminClient(
         settings.pricer_base_url,
         timeout_sec=settings.pricer_admin_timeout_sec,
+        username=settings.ui_auth_username,
+        password=settings.ui_auth_password.get_secret_value() or None,
     )
 
     async def readiness_probe() -> tuple[bool, dict[str, str]]:

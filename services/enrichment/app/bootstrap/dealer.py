@@ -35,6 +35,8 @@ async def build_dealer_bundle(runtime: EnrichmentRuntime) -> DealerBundle | None
     pricer_client = HttpPricerAdminClient(
         runtime.settings.pricer_base_url,
         timeout_sec=runtime.settings.pricer_admin_timeout_sec,
+        username=runtime.settings.ui_auth_username,
+        password=runtime.settings.ui_auth_password.get_secret_value() or None,
     )
     crawler_client = HttpCrawlerClient(
         runtime.settings.crawler_base_url,
