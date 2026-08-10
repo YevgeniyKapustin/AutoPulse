@@ -29,6 +29,11 @@ Datastore bootstrap on the host:
 | Local | `${RABBITMQ_USER:-autopulse}` (and friends) — weak defaults OK |
 | Prod | `${RABBITMQ_USER:?…}` — missing/empty fails compose parse |
 
+Outside `local` / `dev`, enrichment and pricer also refuse weak in-app
+defaults at startup (`RABBITMQ_PASSWORD`, pricer `MYSQL_PASSWORD`, and
+`UI_AUTH_PASSWORD` when UIs are enabled). Known placeholders such as
+`autopulse` / `change-me` are rejected.
+
 Observability (`CLICKHOUSE_*`, `GRAFANA_*`) follows the same rule: weak
 defaults in `compose.yaml`, `${VAR:?…}` in `compose.prod.yaml`.
 
@@ -80,10 +85,13 @@ docker compose config   # validate merge
 `--reload` restarts the process on code change; lifespan shutdown stops
 consumers and closes aio_pika channels.
 
-Local ops dashboard (enrichment, no auth): `http://127.0.0.1:8001/admin`.
+Local ops dashboard (enrichment): `http://127.0.0.1:8001/admin`.
 Dealer pipeline UI: `http://127.0.0.1:8001/dealer` (or `/`).
 Keep both host-bound; do not publish them in production compose ports.
-Disable via `ADMIN_UI_ENABLED=false` / `DEALER_UI_ENABLED=false`.
+When `UI_AUTH_PASSWORD` is set, enrichment UIs and pricer `/api/v1/admin`
+require HTTP Basic (`UI_AUTH_USERNAME`) or `X-API-Key`. Enrichment's
+server-side pricer client sends the same Basic credentials. Disable UIs
+via `ADMIN_UI_ENABLED=false` / `DEALER_UI_ENABLED=false`.
 `compose.override.yaml` sets `PRICER_BASE_URL=http://pricer:8002` and
 `RABBITMQ_MANAGEMENT_URL=http://rabbitmq:15672` so the enrichment
 container can reach siblings; metrics dashboard links stay on
@@ -116,6 +124,8 @@ docker compose -f compose.yaml -f compose.prod.yaml up -d
 dummy secrets for `config -q` and pushes images as
 `ghcr.io/yevgeniykapustin/autopulse-{enrichment,pricer}:ci-<sha>` on push
 to `main`/`master`.
+
+Backup / restore for Mongo + MySQL: see [`docs/backup-restore.md`](backup-restore.md).
 
 ## Admin processes (Factor XII)
 

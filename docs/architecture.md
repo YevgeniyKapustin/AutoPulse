@@ -44,6 +44,9 @@ failure so TTL retries can reclaim).
 | Pricing metrics / history | MySQL | Pricer |
 | Transient jobs | RabbitMQ | both |
 
+Backup / restore: [`docs/backup-restore.md`](backup-restore.md).
+Do not treat RabbitMQ as durable application state.
+
 ## Resilience
 
 ```
