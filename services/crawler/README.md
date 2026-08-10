@@ -32,6 +32,9 @@ uvicorn services.crawler.app.main:app --reload --port 8003
 curl -s -X POST http://127.0.0.1:8003/api/v1/ingest/iaai \
   -H "Content-Type: application/json" \
   -d @services/crawler/fixtures/iaai_stock.json
+
+# built-in fixtures (same files as above)
+curl -s -X POST http://127.0.0.1:8003/api/v1/ingest/samples/copart
 ```
 
 ## Layout
