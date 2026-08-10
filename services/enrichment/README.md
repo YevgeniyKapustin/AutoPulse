@@ -38,6 +38,17 @@ Local-only admin UI (no auth):
 Disable with `ADMIN_UI_ENABLED=false`. Queue depths come from RabbitMQ
 Management (`RABBITMQ_MANAGEMENT_URL`). Do not expose `/admin` publicly.
 
+## Dealer pipeline
+
+Dealer-facing UI (no auth, local DX):
+
+- Submit: `http://127.0.0.1:8001/` or `/dealer`
+- Sample lots: crawler fixtures via `POST /dealer/samples/{copart|iaai}`
+- Result poll: `/dealer/listings/{external_id}`
+
+Needs crawler up (`CRAWLER_BASE_URL`, Compose: `http://crawler:8003`).
+Disable with `DEALER_UI_ENABLED=false`.
+
 ## CV models
 
 Plate + watermark detection use pretrained YOLO ONNX models under

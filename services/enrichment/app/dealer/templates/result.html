@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ external_id }} · AutoPulse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,650&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dealer/static/dealer.css" />
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+  <div class="shell">
+    <p class="nav"><a href="/dealer">New listing</a><a href="/admin">Ops</a></p>
+    <h1 class="brand">{{ external_id }}</h1>
+    <p class="lede">Pipeline result — refreshes while enrichment or pricing is still running.</p>
+
+    <div
+      id="pipeline"
+      hx-get="/dealer/listings/{{ external_id }}/status"
+      hx-trigger="load, every 2s"
+      hx-swap="innerHTML"
+    >
+      {% include "partials/status.html" %}
+    </div>
+  </div>
+</body>
+</html>

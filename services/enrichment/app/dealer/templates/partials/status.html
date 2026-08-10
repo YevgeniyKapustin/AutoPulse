@@ -1,0 +1,81 @@
+<section class="panel">
+  <h2>Status</h2>
+  {% if view.listing is none %}
+  <p class="status"><span class="dot"></span> Waiting for enrichment to pick up the listing…</p>
+  {% else %}
+  <p class="status">
+    <span class="dot {% if view.listing.is_fully_enriched %}ok{% endif %}"></span>
+    LLM {% if view.listing.llm_done %}done{% else %}pending{% endif %}
+    · CV {% if view.listing.cv_done %}done{% else %}pending{% endif %}
+    · Price {% if view.priced %}ready{% else %}pending{% endif %}
+  </p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Pricing</h2>
+  {% if view.pricing %}
+  <div class="cards">
+    <article class="card">
+      <h3>Recommended bid</h3>
+      <p class="stat">{{ view.pricing.recommended_dealer_bid }}</p>
+    </article>
+    <article class="card">
+      <h3>Reference bid</h3>
+      <p class="stat">{{ view.pricing.bid_price }}</p>
+    </article>
+    <article class="card">
+      <h3>Turnover days</h3>
+      <p class="stat">{{ view.pricing.estimated_turnover_days }}</p>
+    </article>
+    <article class="card">
+      <h3>Band</h3>
+      <p class="stat" style="font-size:1.1rem">
+        {{ view.pricing.price_low }} – {{ view.pricing.price_high }}
+      </p>
+    </article>
+  </div>
+  {% else %}
+  <p class="muted">No price yet — usually arrives right after enrichment finishes.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Enrichment</h2>
+  {% if view.listing %}
+  <p><strong>{{ view.listing.title or "—" }}</strong></p>
+  <p class="muted">{{ view.listing.description or "No description" }}</p>
+  <div class="cards" style="margin-top:1rem">
+    <article class="card"><h3>Source</h3><p>{{ view.listing.source }}</p></article>
+    <article class="card"><h3>Ask</h3><p class="stat" style="font-size:1.3rem">{{ view.listing.asking_price if view.listing.asking_price is not none else "—" }}</p></article>
+    <article class="card"><h3>Year</h3><p>{{ view.listing.year or "—" }}</p></article>
+    <article class="card"><h3>Mileage km</h3><p>{{ view.listing.mileage_km or "—" }}</p></article>
+  </div>
+  <h2 style="margin-top:1.25rem">Options</h2>
+  <ul class="checks">
+    <li><span>packages</span><code>{{ view.listing.options.packages }}</code></li>
+    <li><span>features</span><code>{{ view.listing.options.features }}</code></li>
+    <li><span>tags</span><code>{{ view.listing.options.tags }}</code></li>
+    <li><span>owner_count</span><code>{{ view.listing.options.owner_count }}</code></li>
+  </ul>
+  <h2 style="margin-top:1.25rem">Defects</h2>
+  {% if view.listing.defects %}
+  <ul class="checks">
+    {% for defect in view.listing.defects %}
+    <li><span>{{ defect.label }}</span><code>{{ "%.2f"|format(defect.confidence) }}</code></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No defects recorded yet</p>
+  {% endif %}
+  {% else %}
+  <p class="muted">Enrichment document not visible yet.</p>
+  {% endif %}
+</section>
+
+{% if view.listing and view.listing.is_fully_enriched and view.priced %}
+<script>
+  const el = document.getElementById("pipeline");
+  if (el) { el.removeAttribute("hx-trigger"); }
+</script>
+{% endif %}

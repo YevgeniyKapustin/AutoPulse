@@ -38,6 +38,8 @@ Uses `compose.yaml` + `compose.override.yaml` (host ports, bind mounts, reload).
 
 - Enrichment health: http://localhost:8001/health/live
 - Enrichment ready: http://localhost:8001/health/ready
+- Dealer pipeline UI: http://localhost:8001/dealer
+- Ops dashboard: http://localhost:8001/admin
 - Pricer health: http://localhost:8002/health/live
 - Pricer ready: http://localhost:8002/health/ready
 - Enrichment metrics: http://localhost:9091/metrics

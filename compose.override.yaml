@@ -29,6 +29,7 @@ services:
       # Server-side admin hops use Compose DNS (not host localhost).
       RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
       PRICER_BASE_URL: http://pricer:8002
+      CRAWLER_BASE_URL: http://crawler:8003
       # Metrics links are opened in the host browser.
       METRICS_SCRAPE_URL: http://127.0.0.1:9091/metrics
       PRICER_METRICS_SCRAPE_URL: http://127.0.0.1:9092/metrics

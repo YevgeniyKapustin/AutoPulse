@@ -81,8 +81,9 @@ docker compose config   # validate merge
 consumers and closes aio_pika channels.
 
 Local ops dashboard (enrichment, no auth): `http://127.0.0.1:8001/admin`.
-Keep it host-bound; do not publish `/admin` in production compose ports.
-Disable via `ADMIN_UI_ENABLED=false`.
+Dealer pipeline UI: `http://127.0.0.1:8001/dealer` (or `/`).
+Keep both host-bound; do not publish them in production compose ports.
+Disable via `ADMIN_UI_ENABLED=false` / `DEALER_UI_ENABLED=false`.
 `compose.override.yaml` sets `PRICER_BASE_URL=http://pricer:8002` and
 `RABBITMQ_MANAGEMENT_URL=http://rabbitmq:15672` so the enrichment
 container can reach siblings; metrics dashboard links stay on

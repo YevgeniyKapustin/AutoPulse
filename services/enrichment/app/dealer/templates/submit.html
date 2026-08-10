@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoPulse · Submit listing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,650&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/dealer/static/dealer.css" />
+</head>
+<body>
+  <div class="shell">
+    <p class="nav"><a href="/dealer">Dealer</a><a href="/admin">Ops</a></p>
+    <h1 class="brand">AutoPulse</h1>
+    <p class="lede">
+      Pull a sample lot from the crawler, or paste your own. Enrichment and
+      pricing run on the same path as production ingest.
+    </p>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    {% if samples %}
+    <section class="panel samples">
+      <h2>Crawler samples</h2>
+      <p class="hint">
+        Built-in Copart / IAAI fixtures → adapter → enrichment queue.
+      </p>
+      <div class="actions">
+        {% for source in samples %}
+        <form method="post" action="/dealer/samples/{{ source }}">
+          <button class="btn btn-secondary" type="submit">
+            Run {{ source|upper }} sample
+          </button>
+        </form>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <form class="panel" method="post" action="/dealer/submit">
+      <h2>Custom listing</h2>
+      <div class="grid2">
+        <div>
+          <label for="source">Source</label>
+          <select id="source" name="source">
+            <option value="manual" {% if form.source == "manual" %}selected{% endif %}>Manual</option>
+            <option value="copart" {% if form.source == "copart" %}selected{% endif %}>Copart</option>
+            <option value="iaai" {% if form.source == "iaai" %}selected{% endif %}>IAAI</option>
+          </select>
+        </div>
+        <div>
+          <label for="external_ref">Lot / stock / id</label>
+          <input id="external_ref" name="external_ref" value="{{ form.external_ref or '' }}" />
+        </div>
+      </div>
+      <label for="title">Title</label>
+      <input id="title" name="title" value="{{ form.title or '' }}" placeholder="2019 BMW 320i" />
+      <label for="description">Description</label>
+      <textarea id="description" name="description" placeholder="Packages, damage notes, history…">{{ form.description or '' }}</textarea>
+      <div class="grid2">
+        <div>
+          <label for="make">Make</label>
+          <input id="make" name="make" value="{{ form.make or '' }}" />
+        </div>
+        <div>
+          <label for="model">Model</label>
+          <input id="model" name="model" value="{{ form.model or '' }}" />
+        </div>
+        <div>
+          <label for="year">Year</label>
+          <input id="year" name="year" value="{{ form.year or '' }}" />
+        </div>
+        <div>
+          <label for="mileage_km">Mileage (km)</label>
+          <input id="mileage_km" name="mileage_km" value="{{ form.mileage_km or '' }}" />
+        </div>
+        <div>
+          <label for="asking_price">Asking / high bid</label>
+          <input id="asking_price" name="asking_price" value="{{ form.asking_price or '' }}" />
+        </div>
+        <div>
+          <label for="currency">Currency</label>
+          <input id="currency" name="currency" value="{{ form.currency or 'USD' }}" />
+        </div>
+      </div>
+      <label for="url">Listing URL</label>
+      <input id="url" name="url" value="{{ form.url or '' }}" />
+      <label for="image_urls">Image URLs (one per line)</label>
+      <textarea id="image_urls" name="image_urls">{{ form.image_urls or '' }}</textarea>
+      <p class="hint">Optional: paste vendor JSON below instead of filling the form fields.</p>
+      <label for="json_payload">Raw JSON (optional)</label>
+      <textarea id="json_payload" name="json_payload" placeholder='{"lotNumber":"12345678", ...}'>{{ form.json_payload or '' }}</textarea>
+      <button class="btn" type="submit">Run pipeline</button>
+    </form>
+  </div>
+</body>
+</html>

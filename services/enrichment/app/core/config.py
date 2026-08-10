@@ -80,9 +80,12 @@ class Settings(BaseSettings):
     outbox_drain_interval_sec: float = 5.0
     shutdown_timeout_sec: float = 10.0
     admin_ui_enabled: bool = True
+    dealer_ui_enabled: bool = True
     rabbitmq_management_url: str = "http://localhost:15672"
     pricer_base_url: str = "http://localhost:8002"
     pricer_admin_timeout_sec: float = 2.0
+    crawler_base_url: str = "http://localhost:8003"
+    crawler_timeout_sec: float = 5.0
     # Pricer queue names (for Rabbit Management depth cards).
     pricer_queue_name: str = "pricer.enriched"
     pricer_dlq_name: str = "pricer.dlq"

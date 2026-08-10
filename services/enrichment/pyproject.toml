@@ -9,6 +9,7 @@ package-mode = false
 python = ">=3.12,<3.14"
 autopulse-shared = { path = "../../shared", develop = true }
 fastapi = "^0.115"
+python-multipart = "^0.0.12"
 uvicorn = { version = "^0.30", extras = ["standard"] }
 aio-pika = "^9.4"
 motor = "^3.5"

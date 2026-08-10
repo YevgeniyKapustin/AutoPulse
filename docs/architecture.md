@@ -60,8 +60,9 @@ Malformed / permanent failures skip TTL retry and go straight to DLQ.
 
 ```
 services/enrichment/app/
-  api/           HTTP routes (+ admin JSON/UI)
+  api/           HTTP routes (+ admin/dealer UI)
   admin/         ops dashboard service, templates, static
+  dealer/        dealer submit + pipeline result UI
   bootstrap/     composition root + process lifecycle
   consumers/     aio_pika workers
   enrichment/    orchestrator + ports (protocols)
