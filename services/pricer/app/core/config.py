@@ -1,8 +1,14 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
 from urllib.parse import quote, quote_plus
 
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from autopulse_shared.secrets_policy import (
+    is_local_environment,
+    require_strong_secret,
+)
 
 RunMode = Literal["api", "worker", "all"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -16,11 +22,13 @@ class Settings(BaseSettings):
     pricer_port: int = 8002
     log_level: LogLevel = "INFO"
     environment: str = "local"
-    # Scraped on a dedicated port (not the public API). Disable via METRICS_ENABLED.
+    # Scraped on a dedicated port (not the public API).
+    # Disable via METRICS_ENABLED.
     metrics_enabled: bool = True
     metrics_host: str = "0.0.0.0"
     metrics_port: int = 9092
-    # api = HTTP only; worker = consumer only; all = both (local DX)
+    # api = HTTP only; worker = consumer only;
+    # all = both (local DX).
     run_mode: RunMode = "all"
 
     rabbitmq_host: str = "localhost"
@@ -46,6 +54,10 @@ class Settings(BaseSettings):
     pricer_retry_max_delay_sec: float = 30.0
     outbox_drain_interval_sec: float = 5.0
     shutdown_timeout_sec: float = 10.0
+    # Empty password disables the gate (local DX).
+    # When set: HTTP Basic + X-API-Key.
+    ui_auth_username: str = "autopulse"
+    ui_auth_password: SecretStr = SecretStr("")
 
     mysql_host: str = "localhost"
     mysql_port: int = 3306
@@ -57,6 +69,17 @@ class Settings(BaseSettings):
     default_target_margin_pct: float = 12.0
     default_turnover_days: int = 21
     pricing_engine: PricingEngineName = "rules"
+
+    @model_validator(mode="after")
+    def reject_weak_secrets_outside_local(self) -> Self:
+        if is_local_environment(self.environment):
+            return self
+        require_strong_secret("RABBITMQ_PASSWORD", self.rabbitmq_password)
+        require_strong_secret("MYSQL_PASSWORD", self.mysql_password)
+        ui_password = self.ui_auth_password.get_secret_value()
+        if ui_password:
+            require_strong_secret("UI_AUTH_PASSWORD", ui_password)
+        return self
 
     @property
     def rabbitmq_url(self) -> str:

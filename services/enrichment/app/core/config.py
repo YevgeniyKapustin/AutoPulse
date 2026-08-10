@@ -1,9 +1,14 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
 from urllib.parse import quote, quote_plus
 
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from autopulse_shared.secrets_policy import (
+    is_local_environment,
+    require_strong_secret,
+)
 
 RunMode = Literal["api", "worker", "all"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -17,11 +22,13 @@ class Settings(BaseSettings):
     enrichment_port: int = 8001
     log_level: LogLevel = "INFO"
     environment: str = "local"
-    # Scraped on a dedicated port (not the public API). Disable via METRICS_ENABLED.
+    # Scraped on a dedicated port (not the public API).
+    # Disable via METRICS_ENABLED.
     metrics_enabled: bool = True
     metrics_host: str = "0.0.0.0"
     metrics_port: int = 9091
-    # api = HTTP + publisher; worker = consumer only; all = both (local DX)
+    # api = HTTP + publisher; worker = consumer only;
+    # all = both (local DX).
     run_mode: RunMode = "all"
 
     rabbitmq_host: str = "localhost"
@@ -53,7 +60,7 @@ class Settings(BaseSettings):
 
     llm_provider: LlmProvider = "openai"
     llm_model: str = "gpt-4o-mini"
-    # Empty default keeps local heuristic path; use SecretStr so dumps hide the value.
+    # Empty keeps local heuristic path; SecretStr hides dumps.
     llm_api_key: SecretStr = SecretStr("")
     llm_timeout_sec: int = 30
     llm_max_retries: int = 3
@@ -81,17 +88,35 @@ class Settings(BaseSettings):
     shutdown_timeout_sec: float = 10.0
     admin_ui_enabled: bool = True
     dealer_ui_enabled: bool = True
+    # Empty password disables the gate (local DX).
+    # When set: HTTP Basic + X-API-Key.
+    ui_auth_username: str = "autopulse"
+    ui_auth_password: SecretStr = SecretStr("")
     rabbitmq_management_url: str = "http://localhost:15672"
     pricer_base_url: str = "http://localhost:8002"
     pricer_admin_timeout_sec: float = 2.0
     crawler_base_url: str = "http://localhost:8003"
     crawler_timeout_sec: float = 5.0
+    # Ops queue cards: work/retry warn above half, bad above this.
+    admin_queue_warn_depth: int = 100
+    # DLQ card turns bad when depth is greater than this (0 => any msg).
+    admin_dlq_warn_depth: int = 0
     # Pricer queue names (for Rabbit Management depth cards).
     pricer_queue_name: str = "pricer.enriched"
     pricer_dlq_name: str = "pricer.dlq"
     pricer_retry_queue_name: str = "pricer.retry"
     metrics_scrape_url: str = "http://localhost:9091/metrics"
     pricer_metrics_scrape_url: str = "http://localhost:9092/metrics"
+
+    @model_validator(mode="after")
+    def reject_weak_secrets_outside_local(self) -> Self:
+        if is_local_environment(self.environment):
+            return self
+        require_strong_secret("RABBITMQ_PASSWORD", self.rabbitmq_password)
+        ui_password = self.ui_auth_password.get_secret_value()
+        if self.admin_ui_enabled or self.dealer_ui_enabled or ui_password:
+            require_strong_secret("UI_AUTH_PASSWORD", ui_password)
+        return self
 
     @property
     def rabbitmq_url(self) -> str:
