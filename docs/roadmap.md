@@ -42,3 +42,14 @@ item in the current week unless the user redirects.
 - [x] Real watermark / plate heuristics
 - [x] Multi-source crawler adapters
 - [x] RabbitMQ production hardening (see `docs/messaging.md`)
+
+## Next — Hardening beyond MVP
+
+Order is intentional. Pick the first unchecked item unless redirected.
+
+- [x] Auth gate for enrichment `/admin` + `/dealer` (+ `/api/v1/admin`)
+- [x] Same gate on pricer `/api/v1/admin` and pass creds from enrichment client
+- [x] Secrets hygiene for prod compose (no default broker/DB passwords)
+- [x] DLQ / queue-depth alerts (Grafana alert or ops threshold card)
+- [x] Backup / restore runbook for MongoDB + MySQL
+- [x] Load smoke: scripted N listings through the full pipeline

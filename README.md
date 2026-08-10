@@ -48,6 +48,14 @@ Uses `compose.yaml` + `compose.override.yaml` (host ports, bind mounts, reload).
 
 Optional logs stack: `make up-observability` — see [docs/logging.md](docs/logging.md).
 
+Load smoke (N unique crawler fixtures → enrichment):
+
+```bash
+make load-smoke N=20
+# or: python scripts/load_smoke.py --count 20 --wait-sec 60
+```
+
+Mongo / MySQL backup & restore: [docs/backup-restore.md](docs/backup-restore.md).
 Production overlay (registry images, no DB ports): see [docs/docker.md](docs/docker.md).
 RabbitMQ production checklist: [docs/messaging.md](docs/messaging.md).
 

@@ -1,8 +1,9 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help up up-observability down logs build test test-int lint format install config-prod up-prod migrate migrate-docker
+.PHONY: help up up-observability down logs build test test-int lint format install config-prod up-prod migrate migrate-docker load-smoke
 
 POETRY ?= poetry
+N ?= 10
 
 help:
 	@echo "AutoPulse targets:"
@@ -14,6 +15,7 @@ help:
 	@echo "  make logs              - follow compose logs"
 	@echo "  make migrate           - alembic via host Poetry (dev)"
 	@echo "  make migrate-docker    - alembic one-off in pricer container"
+	@echo "  make load-smoke        - ingest N unique fixtures via crawler (N=10)"
 	@echo "  make config-prod       - validate compose.yaml + compose.prod.yaml"
 	@echo "  make up-prod           - prod overlay (TAG + secrets required)"
 	@echo "  make test              - unit tests (skip integration)"
@@ -38,6 +40,9 @@ build:
 
 logs:
 	docker compose logs -f
+
+load-smoke:
+	python scripts/load_smoke.py --count $(N)
 
 migrate:
 	$(POETRY) -C services/pricer run alembic -c alembic.ini upgrade head
