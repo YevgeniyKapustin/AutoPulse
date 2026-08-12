@@ -1,0 +1,235 @@
+# Base stack — shared by local override and compose.prod.yaml.
+# Local:  docker compose up -d --build
+# Prod:   TAG=... docker compose -f compose.yaml -f compose.prod.yaml up -d
+#
+# Only service-discovery values live under environment: so env_file secrets
+# (compose.override / compose.prod) are not overridden by YAML defaults.
+
+name: autopulse
+
+x-app-env: &app-env
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13.6-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-autopulse}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-autopulse}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  mongodb:
+    image: mongo:7.0.16
+    restart: unless-stopped
+    volumes:
+      - mongodb_data:/data/db
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  mysql:
+    image: mysql:8.4.3
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-autopulse}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-autopulse_pricing}
+      MYSQL_USER: ${MYSQL_USER:-autopulse}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-autopulse}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks: [backend]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "127.0.0.1",
+          "-u${MYSQL_USER:-autopulse}",
+          "-p${MYSQL_PASSWORD:-autopulse}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  enrichment:
+    restart: unless-stopped
+    stop_grace_period: 25s
+    # Scrape-only; not published to the host (see compose.override for local DX).
+    expose:
+      - "9091"
+    environment:
+      <<: *app-env
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: enrichment
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/ready')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 25s
+
+  crawler:
+    restart: unless-stopped
+    stop_grace_period: 15s
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      ENRICHMENT_BASE_URL: http://enrichment:8001
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: crawler
+    networks: [backend]
+    depends_on:
+      enrichment:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health/live')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
+  pricer:
+    restart: unless-stopped
+    stop_grace_period: 25s
+    # Scrape-only; not published to the host (see compose.override for local DX).
+    expose:
+      - "9092"
+    environment:
+      <<: *app-env
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: pricer
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health/ready')",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 25s
+
+  clickhouse:
+    profiles: [observability]
+    image: clickhouse/clickhouse-server:24.8
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: logs
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-autopulse}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-autopulse}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./deploy/observability/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks: [backend]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8123/ping || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  vector:
+    profiles: [observability]
+    image: timberio/vector:0.41.1-alpine
+    restart: unless-stopped
+    user: "0:0"
+    command: ["--config", "/etc/vector/vector.yaml"]
+    environment:
+      CLICKHOUSE_ENDPOINT: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-autopulse}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-autopulse}
+      AUTOPULSE_ENVIRONMENT: ${ENVIRONMENT:-local}
+    volumes:
+      - ./deploy/observability/vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - vector_data:/var/lib/vector
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [backend]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      GF_USERS_DEFAULT_THEME: light
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-autopulse}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-autopulse}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks: [backend]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+networks:
+  # Shared by datastores, API, workers, and observability services.
+  backend:
+    driver: bridge
+
+volumes:
+  rabbitmq_data:
+  mongodb_data:
+  mysql_data:
+  clickhouse_data:
+  vector_data:
+  grafana_data:

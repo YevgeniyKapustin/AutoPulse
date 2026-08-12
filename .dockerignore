@@ -1,0 +1,41 @@
+# Git / IDE
+.git
+.github
+.cursor
+.gitignore
+.idea
+.vscode
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/credentials.json
+**/secrets
+
+# Python junk
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+.venv
+venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+dist
+build
+
+# Docs / tests not needed in image context (code still copied selectively)
+*.md
+!services/**/README.md
+docs
+models
+**/*.pt
+**/*.onnx
+
+# Local compose overrides / data
+data
+**/terminals

@@ -1,0 +1,2 @@
+# Pretrained CV weights (not committed). Download with:
+#   python services/enrichment/scripts/download_cv_models.py

@@ -1,0 +1,63 @@
+[tool.poetry]
+name = "autopulse"
+version = "0.1.0"
+description = "AutoPulse monorepo workspace (tooling + shared only)"
+authors = ["AutoPulse"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.14"
+autopulse-shared = { path = "shared", develop = true }
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.6"
+mypy = "^1.11"
+pytest = "^8.3"
+pytest-asyncio = "^0.24"
+testcontainers = { version = "^4.8", extras = ["mongodb", "mysql", "rabbitmq"] }
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["shared", "services"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "W505"]
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 72
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+mypy_path = ["shared", "services/enrichment", "services/pricer", "services/crawler"]
+files = [
+  "shared",
+  "services/enrichment/app",
+  "services/pricer/app",
+  "services/crawler/app",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = [
+  "shared/tests",
+  "services/enrichment/tests",
+  "services/pricer/tests",
+  "services/crawler/tests",
+  "tests",
+]
+markers = [
+  "integration: requires Docker and testcontainers",
+]

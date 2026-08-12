@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ external_id }} · AutoPulse Ops</title>
+  <link rel="stylesheet" href="/admin/static/admin.css" />
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="eyebrow"><a href="/admin">Ops dashboard</a></p>
+      <h1>{{ external_id }}</h1>
+    </div>
+    <button
+      class="btn"
+      hx-post="/api/v1/admin/listings/{{ external_id }}/re-enrich"
+      hx-swap="none"
+      hx-on::after-request="if(event.detail.successful){ this.textContent='Queued'; }"
+    >
+      Re-enrich
+    </button>
+  </header>
+
+  <main class="stack">
+    <section class="panel">
+      <h2>Enrichment</h2>
+      <div class="cards">
+        <article class="card">
+          <h3>Status</h3>
+          <p>
+            LLM {% if detail.listing.llm_done %}done{% else %}pending{% endif %}
+            · CV {% if detail.listing.cv_done %}done{% else %}pending{% endif %}
+          </p>
+        </article>
+        <article class="card">
+          <h3>Ask</h3>
+          <p class="stat">{{ detail.listing.asking_price if detail.listing.asking_price is not none else "—" }}</p>
+        </article>
+        <article class="card">
+          <h3>Source</h3>
+          <p>{{ detail.listing.source }}</p>
+        </article>
+      </div>
+      <h3>Title / description</h3>
+      <p><strong>{{ detail.listing.title or "—" }}</strong></p>
+      <p class="muted">{{ detail.listing.description or "No description" }}</p>
+      <h3>Options</h3>
+      <ul class="checks">
+        <li><span>packages</span><code>{{ detail.listing.options.packages }}</code></li>
+        <li><span>features</span><code>{{ detail.listing.options.features }}</code></li>
+        <li><span>tags</span><code>{{ detail.listing.options.tags }}</code></li>
+        <li><span>owner_count</span><code>{{ detail.listing.options.owner_count }}</code></li>
+      </ul>
+      <h3>Defects</h3>
+      {% if detail.listing.defects %}
+      <ul class="checks">
+        {% for defect in detail.listing.defects %}
+        <li><span>{{ defect.label }}</span><code>{{ defect.confidence }}</code></li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="muted">No defects recorded</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>Pricing</h2>
+      {% if detail.pricing %}
+      <div class="cards">
+        <article class="card"><h3>Recommended bid</h3><p class="stat">{{ detail.pricing.recommended_dealer_bid }}</p></article>
+        <article class="card"><h3>Bid price</h3><p class="stat">{{ detail.pricing.bid_price }}</p></article>
+        <article class="card"><h3>Turnover days</h3><p class="stat">{{ detail.pricing.estimated_turnover_days }}</p></article>
+        <article class="card"><h3>Model</h3><p>{{ detail.pricing.model_version }}</p></article>
+      </div>
+      {% else %}
+      <p class="muted">No pricing result yet</p>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

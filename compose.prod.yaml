@@ -1,0 +1,224 @@
+# Production overlay — never merge compose.override.yaml on the server.
+#
+#   export TAG=$(git rev-parse --short HEAD)
+#   export ENRICHMENT_ENV_FILE=/run/env/enrichment.env
+#   export PRICER_ENV_FILE=/run/env/pricer.env
+#   # host shell must also set datastore bootstrap secrets (no weak defaults):
+#   export RABBITMQ_USER=... RABBITMQ_PASSWORD=...
+#   export MYSQL_ROOT_PASSWORD=... MYSQL_USER=... MYSQL_PASSWORD=... MYSQL_DATABASE=...
+#   # observability profile also needs:
+#   export CLICKHOUSE_USER=... CLICKHOUSE_PASSWORD=...
+#   export GRAFANA_ADMIN_USER=... GRAFANA_ADMIN_PASSWORD=...
+#   docker compose -f compose.yaml -f compose.prod.yaml pull
+#   docker compose -f compose.yaml -f compose.prod.yaml --profile observability up -d
+#
+# App secrets come from required env_file paths. Datastore / observability
+# bootstrap vars interpolate from the host shell — missing/empty values fail
+# compose parse. All app services join the base `backend` network.
+
+x-app-env: &app-env
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+
+services:
+  rabbitmq:
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?set RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
+    logging: &json-log
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  mongodb:
+    logging: *json-log
+
+  mysql:
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?set MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER:?set MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "127.0.0.1",
+          "-u${MYSQL_USER:?set MYSQL_USER}",
+          "-p${MYSQL_PASSWORD:?set MYSQL_PASSWORD}",
+        ]
+    logging: *json-log
+
+  enrichment:
+    image: ghcr.io/yevgeniykapustin/autopulse-enrichment:${TAG:?set TAG to git sha or semver}
+    pull_policy: always
+    expose:
+      - "9091"
+    environment:
+      <<: *app-env
+      RUN_MODE: api
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: enrichment
+    env_file:
+      - path: ${ENRICHMENT_ENV_FILE:?set ENRICHMENT_ENV_FILE}
+        required: true
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    logging: *json-log
+
+  enrichment-worker:
+    image: ghcr.io/yevgeniykapustin/autopulse-enrichment:${TAG:?set TAG to git sha or semver}
+    pull_policy: always
+    restart: unless-stopped
+    stop_grace_period: 25s
+    expose:
+      - "9091"
+    environment:
+      <<: *app-env
+      RUN_MODE: worker
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      RABBITMQ_CONNECTION_NAME: autopulse-enrichment-worker
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: enrichment
+    env_file:
+      - path: ${ENRICHMENT_ENV_FILE:?set ENRICHMENT_ENV_FILE}
+        required: true
+    command:
+      [
+        "python",
+        "-m",
+        "services.enrichment.app.worker",
+      ]
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    logging: *json-log
+
+  pricer:
+    image: ghcr.io/yevgeniykapustin/autopulse-pricer:${TAG:?set TAG to git sha or semver}
+    pull_policy: always
+    expose:
+      - "9092"
+    environment:
+      <<: *app-env
+      RUN_MODE: api
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: pricer
+    env_file:
+      - path: ${PRICER_ENV_FILE:?set PRICER_ENV_FILE}
+        required: true
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging: *json-log
+
+  pricer-worker:
+    image: ghcr.io/yevgeniykapustin/autopulse-pricer:${TAG:?set TAG to git sha or semver}
+    pull_policy: always
+    restart: unless-stopped
+    stop_grace_period: 25s
+    expose:
+      - "9092"
+    environment:
+      <<: *app-env
+      RUN_MODE: worker
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      RABBITMQ_CONNECTION_NAME: autopulse-pricer-worker
+    labels:
+      com.autopulse.logs: "true"
+      com.autopulse.service: pricer
+    env_file:
+      - path: ${PRICER_ENV_FILE:?set PRICER_ENV_FILE}
+        required: true
+    command:
+      [
+        "python",
+        "-m",
+        "services.pricer.app.worker",
+      ]
+    networks: [backend]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging: *json-log
+
+  clickhouse:
+    environment:
+      CLICKHOUSE_DB: logs
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    networks: [backend]
+    logging: *json-log
+
+  vector:
+    environment:
+      CLICKHOUSE_ENDPOINT: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
+      AUTOPULSE_ENVIRONMENT: ${ENVIRONMENT:-production}
+    networks: [backend]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    logging: *json-log
+
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?set GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
+    networks: [backend]
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    logging: *json-log

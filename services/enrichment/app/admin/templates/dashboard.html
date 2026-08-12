@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoPulse Ops</title>
+  <link rel="stylesheet" href="/admin/static/admin.css" />
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="eyebrow">AutoPulse</p>
+      <h1>Ops dashboard</h1>
+    </div>
+    <div class="meta">
+      <a href="{{ overview.metrics_enrichment_url }}" target="_blank" rel="noreferrer">
+        Enrichment metrics
+      </a>
+      <a href="{{ overview.metrics_pricer_url }}" target="_blank" rel="noreferrer">
+        Pricer metrics
+      </a>
+    </div>
+  </header>
+
+  <main class="stack">
+    <section class="panel">
+      <h2>Readiness</h2>
+      <div class="cards">
+        <article class="card {% if overview.readiness.enrichment_ready %}ok{% else %}bad{% endif %}">
+          <h3>Enrichment</h3>
+          <p>{% if overview.readiness.enrichment_ready %}ready{% else %}not ready{% endif %}</p>
+          <ul class="checks">
+            {% for name, value in overview.readiness.enrichment_checks.items() %}
+            <li><span>{{ name }}</span><code>{{ value }}</code></li>
+            {% endfor %}
+          </ul>
+        </article>
+        <article class="card {% if overview.readiness.pricer_ready %}ok{% elif overview.readiness.pricer_ready is none %}unknown{% else %}bad{% endif %}">
+          <h3>Pricer</h3>
+          <p>
+            {% if overview.readiness.pricer_ready is none %}
+              unreachable
+            {% elif overview.readiness.pricer_ready %}
+              ready
+            {% else %}
+              not ready
+            {% endif %}
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Queue depths</h2>
+      {% if overview.queue_alerts.bad_count or overview.queue_alerts.warn_count %}
+      <p class="alert-banner {% if overview.queue_alerts.bad_count %}bad{% else %}warn{% endif %}">
+        {% if overview.queue_alerts.bad_count %}
+          {{ overview.queue_alerts.bad_count }} queue(s) over threshold
+          (DLQ &gt; {{ overview.queue_alerts.dlq_warn_depth }},
+          work/retry &gt; {{ overview.queue_alerts.work_warn_depth }}).
+        {% else %}
+          {{ overview.queue_alerts.warn_count }} queue(s) approaching backlog limit
+          (work/retry warn above {{ (overview.queue_alerts.work_warn_depth // 2) }}).
+        {% endif %}
+      </p>
+      {% else %}
+      <p class="hint">
+        Thresholds: DLQ &gt; {{ overview.queue_alerts.dlq_warn_depth }} bad;
+        work/retry &gt; {{ overview.queue_alerts.work_warn_depth }} bad.
+      </p>
+      {% endif %}
+      <div class="cards six">
+        {% for card in overview.queue_alerts.cards %}
+        <article class="card {{ card.level }}">
+          <h3>{{ card.label }}</h3>
+          <p class="stat">{{ card.depth if card.depth is not none else "—" }}</p>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Pipeline totals</h2>
+      <div class="cards">
+        <article class="card"><h3>Listings</h3><p class="stat">{{ overview.listings_total }}</p></article>
+        <article class="card"><h3>Enriched</h3><p class="stat">{{ overview.listings_enriched }}</p></article>
+        <article class="card"><h3>Partial</h3><p class="stat">{{ overview.listings_partial }}</p></article>
+        <article class="card"><h3>Priced</h3><p class="stat">{% if overview.pricer %}{{ overview.pricer.get("priced_total", "—") }}{% else %}—{% endif %}</p></article>
+      </div>
+      <div class="split">
+        <div>
+          <h3>Enrichment messaging</h3>
+          <ul class="checks">
+            {% for name, value in overview.messaging.inbox.items() %}
+            <li><span>inbox {{ name }}</span><code>{{ value }}</code></li>
+            {% endfor %}
+            {% for name, value in overview.messaging.outbox.items() %}
+            <li><span>outbox {{ name }}</span><code>{{ value }}</code></li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div>
+          <h3>Pricer messaging</h3>
+          {% if overview.pricer %}
+          <ul class="checks">
+            {% for name, value in (overview.pricer.get("inbox") or {}).items() %}
+            <li><span>inbox {{ name }}</span><code>{{ value }}</code></li>
+            {% endfor %}
+            {% for name, value in (overview.pricer.get("outbox") or {}).items() %}
+            <li><span>outbox {{ name }}</span><code>{{ value }}</code></li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="muted">Pricer overview unavailable</p>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Recent listings</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>external_id</th>
+              <th>source</th>
+              <th>title</th>
+              <th>LLM</th>
+              <th>CV</th>
+              <th>updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in listings %}
+            <tr>
+              <td><a href="/admin/listings/{{ row.external_id }}">{{ row.external_id }}</a></td>
+              <td>{{ row.source }}</td>
+              <td>{{ row.title or "—" }}</td>
+              <td>{% if row.llm_done %}yes{% else %}no{% endif %}</td>
+              <td>{% if row.cv_done %}yes{% else %}no{% endif %}</td>
+              <td>{{ row.updated_at or "—" }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="muted">No listings yet</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

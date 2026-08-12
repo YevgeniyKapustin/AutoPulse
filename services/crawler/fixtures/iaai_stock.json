@@ -1,0 +1,17 @@
+{
+  "stockNumber": "98765432",
+  "year": 2018,
+  "make": "Toyota",
+  "model": "Camry",
+  "odometer": 91000,
+  "odometerUnit": "km",
+  "preBidPrice": 9200,
+  "currency": "USD",
+  "vehicleUrl": "https://example.com/iaai/98765432",
+  "title": "2018 Toyota Camry SE",
+  "description": "Clean title candidate, minor front damage.",
+  "images": [
+    "https://example.com/iaai/1.jpg"
+  ],
+  "branch": "Houston"
+}

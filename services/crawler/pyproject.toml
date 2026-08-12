@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "autopulse-crawler"
+version = "0.1.0"
+description = "AutoPulse multi-source listing adapters / ingest"
+authors = ["AutoPulse"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.14"
+autopulse-shared = { path = "../../shared", develop = true }
+fastapi = "^0.115"
+uvicorn = { version = "^0.30", extras = ["standard"] }
+httpx = "^0.27"
+pydantic-settings = "^2.3"
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"

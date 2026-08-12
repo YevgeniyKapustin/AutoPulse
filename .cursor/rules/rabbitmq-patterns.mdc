@@ -1,0 +1,19 @@
+---
+description: RabbitMQ topic, DLQ, and ack-on-aggregation patterns
+globs: "**/consumers/**/*.py,**/messaging/**/*.py"
+alwaysApply: false
+---
+
+# Messaging
+
+- Exchange: topic `autopulse.cars` (durable).
+- Keys: `car.raw.created`, `car.enriched.success`, `car.enrichment.failed`,
+  `car.priced.success`, DLQ keys per service.
+- Prefer quorum queues (`x-queue-type=quorum`) for work + DLQ.
+- `connect_robust` with heartbeat, connection name, connect timeout.
+- Publisher confirms + `mandatory=True` (raise on return).
+- Prefetch limited; ack only after business side effect + outbox drain.
+- Inbox claim by `event_id`; transactional outbox after durable write.
+- Retry with exponential backoff, then DLQ.
+- Shutdown timeout < Compose `stop_grace_period`.
+- Propagate `event_id` / `x-request-id` / `schema_version` in headers.

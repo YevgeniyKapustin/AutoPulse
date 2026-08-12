@@ -1,0 +1,13 @@
+---
+description: Shared schema and SOLID boundaries
+globs: shared/**/*.py
+alwaysApply: false
+---
+
+# Shared contracts
+
+- Event payload changes start here; update both services after.
+- Prefer additive optional fields; avoid renaming without a migration note in
+  `docs/adr/`.
+- Keep schemas free of FastAPI/SQLAlchemy imports.
+- `StrEnum` for sources and event types.

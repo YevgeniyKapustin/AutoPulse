@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "autopulse-pricer"
+version = "0.1.0"
+description = "AutoPulse Market Pricer Service"
+authors = ["AutoPulse"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.14"
+autopulse-shared = { path = "../../shared", develop = true }
+fastapi = "^0.115"
+uvicorn = { version = "^0.30", extras = ["standard"] }
+aio-pika = "^9.4"
+# aiomysql — async runtime; pymysql — sync driver for Alembic migrations
+sqlalchemy = { version = "^2.0", extras = ["asyncio"] }
+aiomysql = "^0.2"
+pymysql = "^1.1"
+alembic = "^1.13"
+pydantic-settings = "^2.3"
+scikit-learn = "^1.5"
+
+[build-system]
+requires = ["poetry-core>=2.0.0"]
+build-backend = "poetry.core.masonry.api"

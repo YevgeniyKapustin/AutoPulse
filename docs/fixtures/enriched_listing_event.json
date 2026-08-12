@@ -1,0 +1,29 @@
+{
+  "event_id": "evt-sample-enriched",
+  "event_type": "car.enriched.success",
+  "request_id": "req-sample",
+  "retry_count": 0,
+  "listing": {
+    "external_id": "copart-12345678",
+    "source": "copart",
+    "title": "2019 BMW 320i xDrive",
+    "description": "M-Sport package, panorama roof, Harman Kardon, one owner.",
+    "make": "BMW",
+    "model": "320i",
+    "year": 2019,
+    "mileage_km": 72000,
+    "asking_price": 18500,
+    "currency": "USD",
+    "image_urls": [],
+    "options": {
+      "packages": ["M-Sport"],
+      "features": ["panorama", "harman_kardon"],
+      "tags": ["heuristic", "one_owner"],
+      "owner_count": 1
+    },
+    "defects": [],
+    "llm_done": true,
+    "cv_done": true,
+    "enrichment_version": "0.1.0"
+  }
+}

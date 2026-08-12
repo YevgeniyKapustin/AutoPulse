@@ -1,0 +1,120 @@
+# Local/dev overrides — auto-merged with compose.yaml only.
+# Never pass this file on a production host (use compose.prod.yaml instead).
+# Infra ports bind to 127.0.0.1 so they are not exposed on LAN/WAN.
+
+services:
+  rabbitmq:
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+
+  mongodb:
+    ports:
+      - "127.0.0.1:27017:27017"
+
+  mysql:
+    ports:
+      - "127.0.0.1:3306:3306"
+
+  enrichment:
+    build:
+      context: .
+      dockerfile: services/enrichment/Dockerfile
+      target: runtime
+    image: autopulse-enrichment:local
+    ports:
+      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:9091:9091"
+    environment:
+      # Server-side admin hops use Compose DNS (not host localhost).
+      RABBITMQ_MANAGEMENT_URL: http://rabbitmq:15672
+      PRICER_BASE_URL: http://pricer:8002
+      CRAWLER_BASE_URL: http://crawler:8003
+      # Metrics links are opened in the host browser.
+      METRICS_SCRAPE_URL: http://127.0.0.1:9091/metrics
+      PRICER_METRICS_SCRAPE_URL: http://127.0.0.1:9092/metrics
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./services/enrichment:/app/services/enrichment
+      - ./shared:/app/shared
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "services.enrichment.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+        "--reload",
+      ]
+
+  pricer:
+    build:
+      context: .
+      dockerfile: services/pricer/Dockerfile
+      target: runtime
+    image: autopulse-pricer:local
+    ports:
+      - "127.0.0.1:8002:8002"
+      - "127.0.0.1:9092:9092"
+    environment:
+      AUTO_CREATE_TABLES: "true"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./services/pricer:/app/services/pricer
+      - ./shared:/app/shared
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "services.pricer.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8002",
+        "--reload",
+      ]
+
+  crawler:
+    build:
+      context: .
+      dockerfile: services/crawler/Dockerfile
+      target: runtime
+    image: autopulse-crawler:local
+    ports:
+      - "127.0.0.1:8003:8003"
+    environment:
+      ENRICHMENT_BASE_URL: http://enrichment:8001
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./services/crawler:/app/services/crawler
+      - ./shared:/app/shared
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "services.crawler.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8003",
+        "--reload",
+      ]
+
+  clickhouse:
+    ports:
+      - "127.0.0.1:8123:8123"
+
+  grafana:
+    ports:
+      - "127.0.0.1:3000:3000"

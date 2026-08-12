@@ -1,0 +1,18 @@
+---
+description: Ruff formatting — code 88, docstrings 72
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Formatting
+
+- Formatter: **Ruff** (`ruff format`), Black-compatible style.
+- Code line length: **88**.
+- Docstrings and comments: wrap at **72** (`W505` / `max-doc-length`).
+- Do not use Black. Do not add `[tool.black]`.
+- After substantive Python edits, run format before finishing.
+
+```bash
+poetry run ruff format shared services
+poetry run ruff check shared services
+```

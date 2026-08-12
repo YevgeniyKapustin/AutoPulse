@@ -10,10 +10,14 @@ dist/
 .eggs/
 *.egg
 .venv/
+.venv-broken/
+services/**/.venv/
 venv/
 ENV/
 .env
 .env.local
+.env.prod
+.env.*.local
 
 # Testing / coverage
 .pytest_cache/
@@ -38,6 +42,10 @@ data/
 models/*.pt
 models/*.onnx
 !models/.gitkeep
+services/enrichment/models/*.onnx
+services/enrichment/models/*.pt
+!services/enrichment/models/.gitkeep
+!services/enrichment/models/README.md
 
 # Secrets
 secrets/

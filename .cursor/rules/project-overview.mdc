@@ -1,0 +1,18 @@
+---
+description: AutoPulse project overview and non-negotiables for every session
+alwaysApply: true
+---
+
+# AutoPulse core
+
+- Two services: `services/enrichment` (Mongo + LLM/CV) and `services/pricer`
+  (MySQL + margin rules), talking over RabbitMQ topic exchange.
+- Shared contracts live in `shared/autopulse_shared/schemas/`.
+- Ack enrichment only after LLM + CV + durable Mongo upsert.
+- Offload blocking CV/SDK work with `asyncio.to_thread`.
+- Follow `docs/roadmap.md`; extend `TODO(week-N)` stubs instead of parallel code.
+- Format with **Ruff** (`ruff format`, code line length 88;
+  docstrings/comments ≤ 72). Do not use Black.
+- English in code; SOLID layering (api → services → repos).
+- Dependencies: Poetry. Root = shared + dev tools only; each service owns
+  its own `pyproject.toml` / lockfile (no cross-service dep dump in root).
